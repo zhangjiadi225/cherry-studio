@@ -220,6 +220,12 @@ export async function buildStreamTextParams(
   // Note: standardParams (topK, frequencyPenalty, presencePenalty, stopSequences, seed)
   // are extracted from custom parameters and passed directly to streamText()
   // instead of being placed in providerOptions
+
+  // Get max tool calls from assistant settings, default to 20 for backward compatibility
+  const maxToolCalls = assistant.settings?.maxToolCalls ?? 20
+  const enableMaxToolCalls = assistant.settings?.enableMaxToolCalls ?? true
+  const effectiveMaxToolCalls = enableMaxToolCalls ? maxToolCalls : 100
+
   const params: StreamTextParams = {
     messages: sdkMessages,
     maxOutputTokens: getMaxTokens(assistant, model),
@@ -230,7 +236,7 @@ export async function buildStreamTextParams(
     abortSignal: options.requestOptions?.signal,
     headers,
     providerOptions,
-    stopWhen: stepCountIs(20),
+    stopWhen: stepCountIs(effectiveMaxToolCalls),
     maxRetries: 0
   }
 
