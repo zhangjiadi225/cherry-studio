@@ -1,4 +1,13 @@
 import type { BootConfigPreferenceKeys } from '@shared/data/bootConfig/bootConfigTypes'
+import type {
+  PetAnimalInstance as SharedPetAnimalInstance,
+  PetPastureBounds as SharedPetPastureBounds,
+  PetSceneMode as SharedPetSceneMode,
+  PetVrmStageModelProfileRecord as SharedPetVrmStageModelProfileRecord,
+  PetVrmStageSceneSettings as SharedPetVrmStageSceneSettings,
+  PetVrmWindowBounds as SharedPetVrmWindowBounds,
+  PetWindowPosition as SharedPetWindowPosition
+} from '@shared/pet'
 import * as z from 'zod'
 
 import type { PreferenceSchemas } from './preferenceSchemas'
@@ -73,6 +82,14 @@ export type LanguageVarious =
   | 'vi-VN'
 
 export type WindowStyle = 'transparent' | 'opaque'
+
+export type PetWindowPosition = SharedPetWindowPosition
+export type PetAnimalInstance = SharedPetAnimalInstance
+export type PetPastureBounds = SharedPetPastureBounds
+export type PetSceneMode = SharedPetSceneMode
+export type PetVrmStageModelProfileRecord = SharedPetVrmStageModelProfileRecord
+export type PetVrmStageSceneSettings = SharedPetVrmStageSceneSettings
+export type PetVrmWindowBounds = SharedPetVrmWindowBounds
 
 export type SendMessageShortcut = 'Enter' | 'Shift+Enter' | 'Ctrl+Enter' | 'Command+Enter' | 'Alt+Enter'
 

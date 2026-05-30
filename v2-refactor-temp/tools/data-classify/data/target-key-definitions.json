@@ -181,6 +181,90 @@
       "description": "OpenClaw selected model UniqueModelId (provider::modelId, from complex mapping openclaw_preferences)"
     },
     {
+      "targetKey": "feature.pet.enabled",
+      "type": "boolean",
+      "defaultValue": false,
+      "status": "classified",
+      "description": "Desktop pet floating window enabled"
+    },
+    {
+      "targetKey": "feature.pet.pin_on_top",
+      "type": "boolean",
+      "defaultValue": true,
+      "status": "classified",
+      "description": "Keep the desktop pet window above other windows"
+    },
+    {
+      "targetKey": "feature.pet.dnd_enabled",
+      "type": "boolean",
+      "defaultValue": false,
+      "status": "classified",
+      "description": "Hide passive desktop pet bubbles while keeping quiet pet presence"
+    },
+    {
+      "targetKey": "feature.pet.selected_package_id",
+      "type": "string",
+      "defaultValue": null,
+      "status": "classified",
+      "description": "Selected desktop pet package id"
+    },
+    {
+      "targetKey": "feature.pet.mode",
+      "type": "PreferenceTypes.PetSceneMode",
+      "defaultValue": "sprite-pasture",
+      "status": "classified",
+      "description": "Selected desktop pet renderer mode"
+    },
+    {
+      "targetKey": "feature.pet.animals",
+      "type": "PreferenceTypes.PetAnimalInstance[]",
+      "defaultValue": "VALUE: []",
+      "status": "classified",
+      "description": "Desktop pasture animal instances"
+    },
+    {
+      "targetKey": "feature.pet.pasture_bounds",
+      "type": "PreferenceTypes.PetPastureBounds",
+      "defaultValue": "VALUE: { width: 640, x: -1, y: -1 }",
+      "status": "classified",
+      "description": "Desktop pasture window position and width"
+    },
+    {
+      "targetKey": "feature.pet.scale",
+      "type": "number",
+      "defaultValue": 0.42,
+      "status": "classified",
+      "description": "Desktop pet render scale"
+    },
+    {
+      "targetKey": "feature.pet.vrm.model_profiles",
+      "type": "PreferenceTypes.PetVrmStageModelProfileRecord",
+      "defaultValue": "VALUE: {}",
+      "status": "classified",
+      "description": "VRM stage model display profiles"
+    },
+    {
+      "targetKey": "feature.pet.vrm.scene_settings",
+      "type": "PreferenceTypes.PetVrmStageSceneSettings",
+      "defaultValue": {
+        "ambientLightIntensity": 2.2,
+        "backgroundColor": "#101820",
+        "backgroundMode": "transparent",
+        "cameraZoom": 1,
+        "fillLightIntensity": 1.2,
+        "keyLightIntensity": 2.8
+      },
+      "status": "classified",
+      "description": "VRM stage pure 3D scene camera, light, and background settings"
+    },
+    {
+      "targetKey": "feature.pet.vrm.window_bounds",
+      "type": "PreferenceTypes.PetVrmWindowBounds",
+      "defaultValue": "VALUE: { height: 720, width: 360, x: -1, y: -1 }",
+      "status": "classified",
+      "description": "VRM stage window position and size"
+    },
+    {
       "targetKey": "feature.translate.action.preferred_lang",
       "type": "PreferenceTypes.TranslateLangCode",
       "defaultValue": "zh-cn",

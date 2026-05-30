@@ -2,6 +2,7 @@ import { CacheService } from '@data/CacheService'
 import { DataApiService } from '@data/DataApiService'
 import { DbService } from '@data/db/DbService'
 import { PreferenceService } from '@data/PreferenceService'
+import { AgentPresentationEventBridge } from '@main/ai/agentPresentation'
 import { AgentJobsService } from '@main/ai/agents/AgentJobsService'
 import { AgentSessionRuntimeService } from '@main/ai/agentSession/AgentSessionRuntimeService'
 import { AiService } from '@main/ai/AiService'
@@ -34,6 +35,8 @@ import { MainWindowService } from '@main/services/MainWindowService'
 import { OcrService } from '@main/services/ocr/OcrService'
 import { OpenClawService } from '@main/services/OpenClawService'
 import { OvmsManager } from '@main/services/OvmsManager'
+import { PetAssetService } from '@main/services/pet/PetAssetService'
+import { PetService } from '@main/services/pet/PetService'
 import { PowerMonitorService } from '@main/services/PowerMonitorService'
 import { ProtocolService } from '@main/services/protocol/ProtocolService'
 import { ProxyManager } from '@main/services/ProxyManager'
@@ -113,8 +116,11 @@ export const services = {
   McpRuntimeService,
   McpCatalogService,
   OpenClawService,
+  PetAssetService,
+  PetService,
   SearchService,
   AgentSessionRuntimeService,
+  AgentPresentationEventBridge,
   AgentJobsService,
   ChannelManager,
   AiService,

@@ -143,6 +143,7 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, 'src/renderer/windows/main/index.html'),
           settings: resolve(__dirname, 'src/renderer/windows/settings/index.html'),
+          pet: resolve(__dirname, 'src/renderer/windows/pet/index.html'),
           quickAssistant: resolve(__dirname, 'src/renderer/windows/quickAssistant/index.html'),
           selectionToolbar: resolve(__dirname, 'src/renderer/windows/selection/toolbar/index.html'),
           selectionAction: resolve(__dirname, 'src/renderer/windows/selection/action/index.html'),

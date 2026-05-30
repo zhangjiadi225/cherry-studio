@@ -1,6 +1,7 @@
 import { isDev, isLinux, isMac, isWin } from '@main/core/platform'
 import { type WindowOptions, WindowType, type WindowTypeMetadata } from '@main/core/window/types'
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH } from '@shared/config/constant'
+import { PET_PASTURE_MIN_WIDTH, PET_WINDOW_HEIGHT, PET_WINDOW_WIDTH } from '@shared/pet'
 
 /**
  * Default window configuration.
@@ -260,6 +261,59 @@ export const WINDOW_TYPE_REGISTRY: Partial<Record<WindowType, WindowTypeMetadata
     quirks: {
       // Re-apply the floating level after every show/showInactive — macOS silently
       // demotes it across cycles. The actual level is read from `behavior.alwaysOnTop`.
+      macReapplyAlwaysOnTop: true
+    }
+  },
+
+  // Desktop pasture window — singleton transparent floating companion surface.
+  // Managed by PetService: visibility, bounds, package selection, and dragging
+  // are handled by service IPC so the renderer never gets arbitrary filesystem access.
+  [WindowType.Pet]: {
+    type: WindowType.Pet,
+    lifecycle: 'singleton',
+    htmlPath: 'windows/pet/index.html',
+    showMode: 'manual',
+    windowOptions: {
+      width: PET_WINDOW_WIDTH,
+      height: PET_WINDOW_HEIGHT,
+      minWidth: PET_PASTURE_MIN_WIDTH,
+      minHeight: PET_WINDOW_HEIGHT,
+      frame: false,
+      transparent: true,
+      alwaysOnTop: true,
+      useContentSize: true,
+      skipTaskbar: true,
+      autoHideMenuBar: true,
+      resizable: true,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      movable: true,
+      hasShadow: false,
+      thickFrame: false,
+      roundedCorners: false,
+      platformOverrides: {
+        mac: {
+          type: 'panel',
+          hiddenInMissionControl: true,
+          acceptFirstMouse: true
+        }
+      },
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: false,
+        webSecurity: false,
+        devTools: isDev,
+        backgroundThrottling: false
+      }
+    },
+    behavior: {
+      alwaysOnTop: { level: 'screen-saver', relativeLevel: 1 },
+      visibleOnAllWorkspaces: { enabled: true, visibleOnFullScreen: true },
+      macShowInDock: false
+    },
+    quirks: {
       macReapplyAlwaysOnTop: true
     }
   },
