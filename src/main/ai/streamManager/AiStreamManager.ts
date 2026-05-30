@@ -495,6 +495,7 @@ export class AiStreamManager extends BaseService {
     // execution's buffer (acceptable: the Renderer demuxes by executionId).
     for (const exec of stream.executions.values()) {
       for (const chunk of exec.buffer) listener.onChunk(chunk.chunk, chunk.executionId)
+      if (exec.finalMessage) listener.onSnapshot?.(exec.finalMessage, exec.modelId)
     }
     return true
   }
@@ -580,6 +581,25 @@ export class AiStreamManager extends BaseService {
     if (stream.listeners.size === 0 && this.config.backgroundMode === 'abort') {
       this.abort(topicId, 'no-subscribers')
     }
+  }
+
+  private onSnapshot(topicId: string, modelId: UniqueModelId, message: CherryUIMessage): void {
+    const stream = this.activeStreams.get(topicId)
+    if (!stream || !isLiveStatus(stream.status)) return
+
+    const dead: string[] = []
+    for (const [id, listener] of stream.listeners) {
+      if (!listener.isAlive()) {
+        dead.push(id)
+        continue
+      }
+      try {
+        listener.onSnapshot?.(message, modelId)
+      } catch (err) {
+        logger.warn('Listener threw', { topicId, listenerId: id, event: 'onSnapshot', err })
+      }
+    }
+    for (const id of dead) stream.listeners.delete(id)
   }
 
   /** Called when one execution finishes. Topic-level done only when ALL executions finished. */
@@ -871,7 +891,9 @@ export class AiStreamManager extends BaseService {
       onChunk: (chunk) => this.onChunk(topicId, modelId, chunk),
       accumulatorSeed,
       onAccumulatedSnapshot: (msg) => {
-        exec.finalMessage = replayApprovalDecisionsOnSnapshot(msg, exec.approvalDecisions)
+        const finalMessage = replayApprovalDecisionsOnSnapshot(msg, exec.approvalDecisions)
+        exec.finalMessage = finalMessage
+        this.onSnapshot(topicId, modelId, finalMessage)
       }
     })
 

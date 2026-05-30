@@ -2,6 +2,7 @@ import type { TokenUsageData } from '@cherrystudio/analytics-client'
 import { electronAPI } from '@electron-toolkit/preload'
 import type { SpanEntity, TokenUsage } from '@mcp-trace/trace-core'
 import type { SpanContext } from '@opentelemetry/api'
+import type { AgentPresentationEvent } from '@shared/ai/agentPresentationEvents'
 import type {
   AiAgentSessionWarmCloseRequest,
   AiAgentSessionWarmRequest,
@@ -80,6 +81,29 @@ import type {
 } from '@shared/file/types/ipc'
 import type { CreateTreeIpcResult, DirectoryTreeOptions, TreeMutationPushPayload } from '@shared/file/types/tree'
 import { IpcChannel } from '@shared/IpcChannel'
+import type {
+  PetActivityState,
+  PetAnimalInstance,
+  PetAssetDeleteRequest,
+  PetAssetImportRemoteRequest,
+  PetAssetImportRequest,
+  PetAssetInfo,
+  PetAssetListRequest,
+  PetAssetResolveRequest,
+  PetAssetResolveResult,
+  PetMouseState,
+  PetPackageInfo,
+  PetPastureResizeRequest,
+  PetPastureSnapshot,
+  PetQuickReplyRequest,
+  PetSemanticAnimationName,
+  PetTaskBubbleHoldState,
+  PetTaskCommand,
+  PetTaskCommandResult,
+  PetWindowBounds,
+  PetWindowPosition,
+  PetWindowResizeRequest
+} from '@shared/pet'
 import type { ShortcutPreferenceKey } from '@shared/shortcuts/types'
 import type {
   FileListResponse,
@@ -148,6 +172,13 @@ export function tracedInvoke(channel: string, spanContext: SpanContext | undefin
     return ipcRenderer.invoke(channel, ...args, data)
   }
   return ipcRenderer.invoke(channel, ...args)
+}
+
+async function dispatchPetTaskCommand(command: PetTaskCommand): Promise<void> {
+  const result = (await ipcRenderer.invoke(IpcChannel.Pet_DispatchTaskCommand, command)) as PetTaskCommandResult
+  if (!result.ok) {
+    throw new Error(result.message ?? `Pet task command failed: ${result.reason}`)
+  }
 }
 
 // Custom APIs for renderer
@@ -430,6 +461,107 @@ const api = {
     close: () => ipcRenderer.invoke(IpcChannel.QuickAssistant_Close),
     toggle: () => ipcRenderer.invoke(IpcChannel.QuickAssistant_Toggle),
     setPin: (isPinned: boolean) => ipcRenderer.invoke(IpcChannel.QuickAssistant_SetPin, isPinned)
+  },
+  pet: {
+    assets: {
+      list: (request?: PetAssetListRequest): Promise<PetAssetInfo[]> =>
+        ipcRenderer.invoke(IpcChannel.Pet_ListAssets, request),
+      import: (request: PetAssetImportRequest): Promise<PetAssetInfo> =>
+        ipcRenderer.invoke(IpcChannel.Pet_ImportAsset, request),
+      importFile: (
+        file: File,
+        request: Omit<PetAssetImportRequest, 'originalFileName' | 'sourcePath'> & { originalFileName?: string }
+      ): Promise<PetAssetInfo> => {
+        const sourcePath = webUtils.getPathForFile(file)
+        return ipcRenderer.invoke(IpcChannel.Pet_ImportAsset, {
+          ...request,
+          sourcePath,
+          originalFileName: request.originalFileName ?? file.name,
+          mediaType: request.mediaType ?? file.type
+        } satisfies PetAssetImportRequest)
+      },
+      importRemote: (request: PetAssetImportRemoteRequest): Promise<PetAssetInfo> =>
+        ipcRenderer.invoke(IpcChannel.Pet_ImportRemoteAsset, request),
+      delete: (request: PetAssetDeleteRequest): Promise<void> =>
+        ipcRenderer.invoke(IpcChannel.Pet_DeleteAsset, request),
+      resolve: (request: PetAssetResolveRequest): Promise<PetAssetResolveResult | null> =>
+        ipcRenderer.invoke(IpcChannel.Pet_ResolveAsset, request)
+    },
+    listPackages: (): Promise<PetPackageInfo[]> => ipcRenderer.invoke(IpcChannel.Pet_ListPackages),
+    getSelectedPackage: (): Promise<PetPackageInfo | null> => ipcRenderer.invoke(IpcChannel.Pet_GetSelectedPackage),
+    selectAndImportPackage: (): Promise<PetPackageInfo | null> =>
+      ipcRenderer.invoke(IpcChannel.Pet_SelectAndImportPackage),
+    selectPackage: (packageId: string): Promise<PetPackageInfo> =>
+      ipcRenderer.invoke(IpcChannel.Pet_SelectPackage, packageId),
+    deletePackage: (packageId: string): Promise<void> => ipcRenderer.invoke(IpcChannel.Pet_DeletePackage, packageId),
+    listAnimals: (): Promise<PetAnimalInstance[]> => ipcRenderer.invoke(IpcChannel.Pet_ListAnimals),
+    upsertAnimal: (instance: PetAnimalInstance): Promise<PetAnimalInstance> =>
+      ipcRenderer.invoke(IpcChannel.Pet_UpsertAnimal, instance),
+    removeAnimal: (instanceId: string): Promise<void> => ipcRenderer.invoke(IpcChannel.Pet_RemoveAnimal, instanceId),
+    reorderAnimals: (instanceIds: string[]): Promise<PetAnimalInstance[]> =>
+      ipcRenderer.invoke(IpcChannel.Pet_ReorderAnimals, instanceIds),
+    getPastureSnapshot: (): Promise<PetPastureSnapshot> => ipcRenderer.invoke(IpcChannel.Pet_GetPastureSnapshot),
+    resizePasture: (request: PetPastureResizeRequest | number): Promise<PetWindowBounds | null> =>
+      ipcRenderer.invoke(IpcChannel.Pet_ResizePasture, request),
+    tasks: {
+      dispatch: (command: PetTaskCommand): Promise<PetTaskCommandResult> =>
+        ipcRenderer.invoke(IpcChannel.Pet_DispatchTaskCommand, command)
+    },
+    dismissTaskBubble: (taskKey: string): Promise<void> =>
+      dispatchPetTaskCommand({ type: 'task.dismiss', taskId: taskKey }),
+    dismissPermissionPrompt: (approvalId: string): Promise<void> =>
+      dispatchPetTaskCommand({ type: 'approval.dismiss', approvalId }),
+    setTaskBubbleHold: (state: PetTaskBubbleHoldState): Promise<void> =>
+      ipcRenderer.invoke(IpcChannel.Pet_SetTaskBubbleHold, state),
+    sendQuickReply: (request: PetQuickReplyRequest): Promise<void> =>
+      dispatchPetTaskCommand({ type: 'task.quick_reply', taskId: request.taskKey, text: request.text }),
+    openTask: (taskKey: string): Promise<void> => dispatchPetTaskCommand({ type: 'task.open', taskId: taskKey }),
+    show: (): Promise<string | null> => ipcRenderer.invoke(IpcChannel.Pet_Show),
+    hide: (): Promise<boolean> => ipcRenderer.invoke(IpcChannel.Pet_Hide),
+    close: (): Promise<boolean> => ipcRenderer.invoke(IpcChannel.Pet_Close),
+    getWindowBounds: (): Promise<PetWindowBounds | null> => ipcRenderer.invoke(IpcChannel.Pet_GetWindowBounds),
+    window: {
+      resize: (request: PetWindowResizeRequest): Promise<PetWindowBounds | null> =>
+        ipcRenderer.invoke(IpcChannel.Pet_ResizeWindow, request)
+    },
+    moveWindow: (position: PetWindowPosition): Promise<PetWindowBounds | null> =>
+      ipcRenderer.invoke(IpcChannel.Pet_MoveWindow, position),
+    setMouseEventsIgnored: (ignored: boolean): Promise<void> =>
+      ipcRenderer.invoke(IpcChannel.Pet_SetMouseEventsIgnored, ignored),
+    startMouseTracking: (): Promise<void> => ipcRenderer.invoke(IpcChannel.Pet_StartMouseTracking),
+    stopMouseTracking: (): Promise<void> => ipcRenderer.invoke(IpcChannel.Pet_StopMouseTracking),
+    startDraggingWindow: (): Promise<boolean> => ipcRenderer.invoke(IpcChannel.Pet_StartDraggingWindow),
+    setPin: (pinOnTop: boolean): Promise<void> => ipcRenderer.invoke(IpcChannel.Pet_SetPin, pinOnTop),
+    playAnimation: (animation: PetSemanticAnimationName, playOnce = false, reason?: string): Promise<void> =>
+      ipcRenderer.invoke(IpcChannel.Pet_PlayAnimation, animation, playOnce, reason),
+    onMouseStateChanged: (callback: (state: PetMouseState) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, state: PetMouseState) => {
+        callback(state)
+      }
+      ipcRenderer.on(IpcChannel.Pet_MouseStateChanged, listener)
+      return () => ipcRenderer.off(IpcChannel.Pet_MouseStateChanged, listener)
+    },
+    onActivityChanged: (callback: (state: PetActivityState) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, state: PetActivityState) => {
+        callback(state)
+      }
+      ipcRenderer.on(IpcChannel.Pet_ActivityChanged, listener)
+      return () => ipcRenderer.off(IpcChannel.Pet_ActivityChanged, listener)
+    },
+    onPackageChanged: (callback: (petPackage: PetPackageInfo | null) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, petPackage: PetPackageInfo | null) => {
+        callback(petPackage)
+      }
+      ipcRenderer.on(IpcChannel.Pet_PackageChanged, listener)
+      return () => ipcRenderer.off(IpcChannel.Pet_PackageChanged, listener)
+    },
+    onPastureChanged: (callback: (snapshot: PetPastureSnapshot) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, snapshot: PetPastureSnapshot) => {
+        callback(snapshot)
+      }
+      ipcRenderer.on(IpcChannel.Pet_PastureChanged, listener)
+      return () => ipcRenderer.off(IpcChannel.Pet_PastureChanged, listener)
+    }
   },
   aes: {
     encrypt: (text: string, secretKey: string, iv: string) =>
@@ -876,6 +1008,14 @@ const api = {
       ipcRenderer.invoke(IpcChannel.Ai_Stream_Queue_Reorder, req),
     queueUpdate: (req: AiStreamQueueUpdateRequest): Promise<boolean> =>
       ipcRenderer.invoke(IpcChannel.Ai_Stream_Queue_Update, req),
+    agentPresentation: {
+      getReplay: (): Promise<AgentPresentationEvent[]> => ipcRenderer.invoke(IpcChannel.Ai_AgentPresentation_GetReplay),
+      onEvent: (callback: (event: AgentPresentationEvent) => void) => {
+        const listener = (_: Electron.IpcRendererEvent, event: AgentPresentationEvent) => callback(event)
+        ipcRenderer.on(IpcChannel.Ai_AgentPresentation_Event, listener)
+        return () => ipcRenderer.off(IpcChannel.Ai_AgentPresentation_Event, listener)
+      }
+    },
     prewarmAgentSession: (req: AiAgentSessionWarmRequest): Promise<void> =>
       ipcRenderer.invoke(IpcChannel.Ai_AgentSession_Prewarm, req),
     closeAgentSessionWarm: (req: AiAgentSessionWarmCloseRequest): Promise<void> =>

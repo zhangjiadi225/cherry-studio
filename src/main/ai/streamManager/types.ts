@@ -80,6 +80,8 @@ export interface StreamListener {
   readonly id: string
 
   onChunk(chunk: UIMessageChunk, sourceModelId?: UniqueModelId): void
+  /** Receives accumulated UIMessage snapshots from AI SDK's readUIMessageStream. */
+  onSnapshot?(message: CherryUIMessage, sourceModelId?: UniqueModelId): void
   onDone(result: StreamDoneResult): void | Promise<void>
   onPaused(result: StreamPausedResult): void | Promise<void>
   onError(result: StreamErrorResult): void | Promise<void>

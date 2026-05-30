@@ -1,6 +1,13 @@
 import type { CherryMessagePart } from '@shared/data/types/message'
 import type { UniqueModelId } from '@shared/data/types/model'
 
+export type {
+  AgentPresentationEvent,
+  AgentPresentationEventHandler,
+  AgentPresentationEventType,
+  AgentPresentationScope
+} from '../agentPresentationEvents'
+
 export interface AiChatRequestBody {
   /** Topic ID for message routing and persistence. */
   topicId: string

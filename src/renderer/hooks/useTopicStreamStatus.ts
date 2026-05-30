@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 interface TopicStreamStatusView {
   status: TopicStreamStatus | undefined
+  turnId?: string
   activeExecutions: ActiveExecution[]
   /**
    * Survives the exec's own terminal status — MCP `needsApproval` ends the
@@ -38,6 +39,7 @@ export function useTopicStreamStatus(topicId: string): TopicStreamStatusView {
   )
 
   const status = entry?.status
+  const turnId = entry?.turnId
   const lastCompletedAt = entry?.lastCompletedAt ?? null
   const activeExecutions = useMemo(() => entry?.activeExecutions ?? [], [entry])
   const awaitingApprovalAnchors = useMemo(() => entry?.awaitingApprovalAnchors ?? [], [entry])
@@ -53,7 +55,7 @@ export function useTopicStreamStatus(topicId: string): TopicStreamStatusView {
     }
   }, [lastCompletedAt, lastSeenCompletion, setLastSeenCompletion])
 
-  return { status, activeExecutions, awaitingApprovalAnchors, pendingQueue, isPending, isFulfilled, markSeen }
+  return { status, turnId, activeExecutions, awaitingApprovalAnchors, pendingQueue, isPending, isFulfilled, markSeen }
 }
 
 export function useTopicAwaitingApproval(topicId: string): boolean {

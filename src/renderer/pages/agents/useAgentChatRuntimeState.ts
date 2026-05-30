@@ -17,6 +17,9 @@ import { isUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
 import { useCallback, useLayoutEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { publishAgentEvent } from './events/agentEventBus'
+import { useAgentEventAdapter } from './events/useAgentEventAdapter'
+
 export type AgentSendOptions = { body?: Record<string, unknown> }
 
 export interface AgentTurnInput {
@@ -130,7 +133,7 @@ export function useAgentChatRuntimeState({
     return next
   }, [uiMessages])
 
-  const { overlay } = useExecutionOverlay(sessionTopicId, chat.activeExecutions, uiMessages)
+  const { overlay, liveAssistants } = useExecutionOverlay(sessionTopicId, chat.activeExecutions, uiMessages)
 
   const partsByMessageId = useMemo<Record<string, CherryMessagePart[]>>(() => {
     const next = { ...basePartsMap }
@@ -139,6 +142,9 @@ export function useAgentChatRuntimeState({
     }
     return next
   }, [basePartsMap, overlay])
+
+  const streamStatus = useTopicStreamStatus(sessionTopicId)
+  const { isPending } = streamStatus
 
   const respondToolApproval = useCallback(
     async ({ match, approved, reason, updatedInput }: MessageToolApprovalInput) => {
@@ -157,15 +163,32 @@ export function useAgentChatRuntimeState({
       if (result.status === 'expired') {
         window.toast.warning(t('agent.toolPermission.toast.timeout'))
       }
+      if (activeAgent?.id) {
+        publishAgentEvent(activeAgent.id, {
+          type: 'approval.resolved',
+          agentId: activeAgent.id,
+          sessionId,
+          streamId: streamStatus.turnId ?? sessionTopicId,
+          timestamp: Date.now(),
+          approvalId,
+          result: approved ? 'approved' : 'rejected'
+        })
+      }
       await refresh()
     },
-    [refresh, sessionTopicId, t]
+    [activeAgent?.id, refresh, sessionId, sessionTopicId, streamStatus.turnId, t]
   )
   const toolApprovalComposerOverrides = useToolApprovalComposerOverrides({
     partsByMessageId,
     onRespond: respondToolApproval
   })
-  const { isPending } = useTopicStreamStatus(sessionTopicId)
+  useAgentEventAdapter({
+    agentId: activeAgent?.id,
+    topicId: sessionTopicId,
+    streamStatus,
+    liveAssistants,
+    partsByMessageId
+  })
 
   const composerContext = useMemo<ComposerContextValue>(
     () => ({
