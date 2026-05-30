@@ -28,6 +28,11 @@ describe('templateToRegex', () => {
     expect(regex.test('scroll.position.abc_def')).toBe(true)
   })
 
+  it('matches topic stream ids that contain namespace colons', () => {
+    const regex = templateToRegex('topic.stream.statuses.${topicId}')
+    expect(regex.test('topic.stream.statuses.agent-session:session-1')).toBe(true)
+  })
+
   it('rejects empty dynamic segment', () => {
     const regex = templateToRegex('scroll.position.${id}')
     expect(regex.test('scroll.position.')).toBe(false)
@@ -85,6 +90,9 @@ describe('findMatchingSharedCacheSchemaKey', () => {
     )
     expect(findMatchingSharedCacheSchemaKey('ocr.provider.last_used_key.mistral')).toBe(
       'ocr.provider.last_used_key.${providerId}'
+    )
+    expect(findMatchingSharedCacheSchemaKey('topic.stream.statuses.agent-session:session-1')).toBe(
+      'topic.stream.statuses.${topicId}'
     )
   })
 

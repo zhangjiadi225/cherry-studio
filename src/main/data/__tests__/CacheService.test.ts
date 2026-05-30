@@ -64,6 +64,7 @@ vi.mock('electron', async () => {
 const SHARED_EXACT = 'web_search.provider.last_used_key.google' as const
 const SHARED_OTHER = 'web_search.provider.last_used_key.openrouter' as const
 const SHARED_TEMPLATE = 'web_search.provider.last_used_key.${providerId}' as const
+const TOPIC_STREAM_TEMPLATE = 'topic.stream.statuses.${topicId}' as const
 
 describe('CacheService subscription', () => {
   let service: any
@@ -282,7 +283,18 @@ describe('CacheService subscription', () => {
       expect(cb).toHaveBeenCalledWith('v', undefined, SHARED_EXACT)
     })
 
-    it('contract: non-ASCII concrete keys do not match templates (locks [\\w\\-]+ charset)', () => {
+    it('fires for agent session topic ids that contain namespace colons', () => {
+      const cb = vi.fn()
+      const key = 'topic.stream.statuses.agent-session:session-1' as const
+      const value = { status: 'pending', activeExecutions: [] }
+
+      service.subscribeSharedChange(TOPIC_STREAM_TEMPLATE, cb)
+      service.setShared(key, value)
+
+      expect(cb).toHaveBeenCalledWith(value, undefined, key)
+    })
+
+    it('contract: non-ASCII concrete keys do not match templates', () => {
       const cb = vi.fn()
       service.subscribeSharedChange(SHARED_TEMPLATE, cb)
       // Write via the IPC path since a TS-typed setShared would reject non-ASCII.

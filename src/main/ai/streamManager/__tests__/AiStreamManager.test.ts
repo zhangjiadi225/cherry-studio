@@ -1,4 +1,5 @@
 import { BaseService } from '@main/core/lifecycle/BaseService'
+import type { CherryUIMessage } from '@shared/data/types/message'
 import type { SerializedError } from '@shared/types/error'
 import type { UIMessageChunk } from 'ai'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -18,6 +19,7 @@ import type {
 class FakeListener implements StreamListener {
   readonly id: string
   chunks: UIMessageChunk[] = []
+  snapshots: CherryUIMessage[] = []
   /** Second argument of each onChunk call, indexed by chunk position. */
   chunkSources: Array<string | undefined> = []
   doneResults: StreamDoneResult[] = []
@@ -34,6 +36,10 @@ class FakeListener implements StreamListener {
   onChunk(chunk: UIMessageChunk, sourceModelId?: string): void {
     this.chunks.push(chunk)
     this.chunkSources.push(sourceModelId)
+  }
+
+  onSnapshot(message: CherryUIMessage): void {
+    this.snapshots.push(message)
   }
 
   onDone(result: StreamDoneResult): void | Promise<void> {
@@ -878,6 +884,7 @@ describe('AiStreamManager', () => {
 
       const parts = (snap.executions[0].finalMessage?.parts ?? []) as Array<{ type: string; text?: string }>
       expect(parts.some((p) => p.type === 'text' && p.text === 'hello')).toBe(true)
+      expect(listener.snapshots.at(-1)).toBe(snap.executions[0].finalMessage)
 
       // Transport-side timings are the only thing the manager tracks —
       // `startedAt` is always set on execution-loop entry and `completedAt` when the

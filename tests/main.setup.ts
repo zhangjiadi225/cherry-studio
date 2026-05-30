@@ -107,6 +107,7 @@ vi.mock('electron', () => {
     },
     screen: {
       getPrimaryDisplay: vi.fn(),
+      getDisplayNearestPoint: vi.fn(),
       getAllDisplays: vi.fn()
     },
     Notification: vi.fn(),
