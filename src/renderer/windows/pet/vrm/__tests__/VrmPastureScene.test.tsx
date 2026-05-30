@@ -510,17 +510,19 @@ describe('VrmPastureScene', () => {
         models={[
           {
             enabled: true,
-            homeXRatio: 0.5,
             id: 'stage-model',
             modelId: 'model-a',
             order: 0,
+            positionX: -0.35,
+            positionY: 0.25,
             profile: {
               animationPreset: 'vroid-greeting',
               createdAt: 1,
               enabled: true,
-              homeXRatio: 0.5,
               modelId: 'model-a',
               order: 0,
+              positionX: -0.35,
+              positionY: 0.25,
               updatedAt: 1
             }
           }
@@ -548,6 +550,9 @@ describe('VrmPastureScene', () => {
       vi.mocked(window.requestAnimationFrame).mock.calls.at(-1)?.[0](16)
     })
 
+    expect(root.position.x).toBeCloseTo(-0.35)
+    expect(root.position.y).toBeCloseTo(0.25)
+    expect(root.position.z).toBeCloseTo(0)
     expect(mixer?.update).toHaveBeenCalledWith(0.016)
     expect(vrm.update).toHaveBeenCalledWith(0.016)
   })

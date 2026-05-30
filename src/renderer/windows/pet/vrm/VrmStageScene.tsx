@@ -33,7 +33,6 @@ type VrmStageSceneProps = {
   onResizePointerDown: (event: PointerEvent<HTMLDivElement>, edge: PetWindowResizeEdge) => void
   onResizePointerMove: (event: PointerEvent<HTMLDivElement>) => void
   onResizePointerUp: (event: PointerEvent<HTMLDivElement>) => void
-  petScale: number
   resizeFrameVisible?: boolean
   sceneSettings?: PetVrmStageSceneSettings
   stageFaded?: boolean
@@ -54,7 +53,6 @@ export default function VrmStageScene({
   onResizePointerDown,
   onResizePointerMove,
   onResizePointerUp,
-  petScale,
   resizeFrameVisible = false,
   sceneSettings = PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS,
   stageFaded = false,
@@ -85,7 +83,6 @@ export default function VrmStageScene({
           models={models}
           onHitTestTransparencyChange={onHitTestTransparencyChange}
           onModelLoadStateChange={onModelLoadStateChange}
-          petScale={petScale}
           sceneSettings={sceneSettings}
           stageHeight={stageHeight}
           stageWidth={stageWidth}
@@ -160,10 +157,11 @@ export function buildPetVrmStageModels(profiles: PetVrmStageModelProfileMap): Pe
     .sort((left, right) => left.order - right.order || left.modelId.localeCompare(right.modelId))
     .map((profile) => ({
       enabled: profile.enabled,
-      homeXRatio: profile.homeXRatio,
       id: profile.modelId,
       modelId: profile.modelId,
       order: profile.order,
+      positionX: profile.positionX,
+      positionY: profile.positionY,
       profile
     }))
 }

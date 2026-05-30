@@ -53,18 +53,20 @@ describe('vrm stage model profiles', () => {
   it('normalizes minimal VRM display settings without agent or personality data', () => {
     const profile = createPetVrmStageModelProfile({
       enabled: true,
-      homeXRatio: 0.42,
       modelId: 'model-a',
-      order: 1
+      order: 1,
+      positionX: -0.45,
+      positionY: 0.2
     })
 
     const profiles = petVrmStageModelProfilesFromRecord({ 'model-a': profile })
 
     expect(profiles.get('model-a')).toMatchObject({
       enabled: true,
-      homeXRatio: 0.42,
       modelId: 'model-a',
-      order: 1
+      order: 1,
+      positionX: -0.45,
+      positionY: 0.2
     })
     expect(profiles.get('model-a')).not.toHaveProperty('agentId')
     expect(profiles.get('model-a')).not.toHaveProperty('personality')
@@ -107,13 +109,14 @@ describe('vrm stage model profiles', () => {
     })
 
     expect(profile).toMatchObject({
-      animationMode: 'idle',
       animationPreset: 'vroid-show-full-body',
       blink: true,
       expression: 'neutral',
       idleMotion: true,
       lookAtCursor: true,
-      modelId: 'model-a'
+      modelId: 'model-a',
+      positionX: 0,
+      positionY: 0
     })
   })
 
@@ -135,17 +138,11 @@ describe('vrm stage model profiles', () => {
     expect(
       normalizePetVrmStageSceneSettings({
         ambientLightIntensity: 999,
-        backgroundColor: 'not-a-color',
-        backgroundMode: 'solid',
-        cameraZoom: 0.2,
         fillLightIntensity: 8,
         keyLightIntensity: 3.4
       })
     ).toEqual({
       ambientLightIntensity: 6,
-      backgroundColor: '#101820',
-      backgroundMode: 'solid',
-      cameraZoom: 0.75,
       fillLightIntensity: 6,
       keyLightIntensity: 3.4
     })

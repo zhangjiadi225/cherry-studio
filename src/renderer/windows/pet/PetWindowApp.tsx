@@ -661,7 +661,6 @@ const PetWindowApp: FC = () => {
           onResizePointerDown={handleResizePointerDown}
           onResizePointerMove={handleResizePointerMove}
           onResizePointerUp={finishWindowResize}
-          petScale={boundedPetScale}
           resizeFrameVisible={vrmResizeFrameVisible}
           sceneSettings={vrmSceneSettings}
           stageFaded={vrmStageFaded}

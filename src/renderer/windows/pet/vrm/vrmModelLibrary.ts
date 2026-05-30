@@ -1,7 +1,5 @@
 import {
-  PET_VRM_STAGE_ANIMATION_MODES,
   PET_VRM_STAGE_ANIMATION_PRESETS,
-  PET_VRM_STAGE_BACKGROUND_MODES,
   PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS,
   PET_VRM_STAGE_EXPRESSION_NAMES,
   type PetAssetImportRemoteRequest,
@@ -38,7 +36,6 @@ export function createPetVrmStageModelProfile(
 
   return {
     createdAt: Number.isFinite(input.createdAt) ? Number(input.createdAt) : (previous?.createdAt ?? now),
-    animationMode: normalizeAnimationMode(input.animationMode ?? previous?.animationMode),
     animationPreset: normalizeAnimationPreset(input.animationPreset ?? previous?.animationPreset),
     blink: typeof input.blink === 'boolean' ? input.blink : (previous?.blink ?? true),
     enabled: typeof input.enabled === 'boolean' ? input.enabled : (previous?.enabled ?? false),
@@ -48,14 +45,13 @@ export function createPetVrmStageModelProfile(
       0,
       1
     ),
-    homeXRatio: normalizeRatio(input.homeXRatio ?? previous?.homeXRatio, 0.5),
     idleMotion: typeof input.idleMotion === 'boolean' ? input.idleMotion : (previous?.idleMotion ?? true),
     lookAtCursor: typeof input.lookAtCursor === 'boolean' ? input.lookAtCursor : (previous?.lookAtCursor ?? true),
     modelId,
     order: Number.isFinite(input.order) ? Number(input.order) : (previous?.order ?? 0),
-    scale: normalizeOptionalNumber(input.scale ?? previous?.scale),
-    updatedAt: Number.isFinite(input.updatedAt) ? Number(input.updatedAt) : now,
-    yOffset: normalizeOptionalNumber(input.yOffset ?? previous?.yOffset)
+    positionX: normalizeCoordinate(input.positionX ?? previous?.positionX, 0),
+    positionY: normalizeCoordinate(input.positionY ?? previous?.positionY, 0),
+    updatedAt: Number.isFinite(input.updatedAt) ? Number(input.updatedAt) : now
   }
 }
 
@@ -207,9 +203,6 @@ export function normalizePetVrmStageSceneSettings(input: unknown): PetVrmStageSc
       6,
       PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS.ambientLightIntensity
     ),
-    backgroundColor: normalizeColor(record.backgroundColor, PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS.backgroundColor),
-    backgroundMode: normalizeBackgroundMode(record.backgroundMode),
-    cameraZoom: normalizeClampedNumber(record.cameraZoom, 0.75, 1.6, PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS.cameraZoom),
     fillLightIntensity: normalizeClampedNumber(
       record.fillLightIntensity,
       0,
@@ -267,10 +260,6 @@ function normalizeOptionalString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
-function normalizeOptionalNumber(value: unknown): number | undefined {
-  return Number.isFinite(value) ? Number(value) : undefined
-}
-
 function normalizeOptionalClampedNumber(value: unknown, min: number, max: number): number | undefined {
   if (!Number.isFinite(value)) return undefined
   return Math.min(Math.max(Number(value), min), max)
@@ -281,19 +270,9 @@ function normalizeClampedNumber(value: unknown, min: number, max: number, fallba
   return Math.min(Math.max(finiteValue, min), max)
 }
 
-function normalizeRatio(value: unknown, fallback: number): number {
+function normalizeCoordinate(value: unknown, fallback: number): number {
   const finiteValue = Number.isFinite(value) ? Number(value) : fallback
-  return Math.min(Math.max(finiteValue, 0), 1)
-}
-
-function normalizeColor(value: unknown, fallback: string): string {
-  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback
-}
-
-function normalizeAnimationMode(value: unknown): PetVrmStageModelProfile['animationMode'] {
-  return typeof value === 'string' && (PET_VRM_STAGE_ANIMATION_MODES as readonly string[]).includes(value)
-    ? (value as PetVrmStageModelProfile['animationMode'])
-    : 'idle'
+  return Math.min(Math.max(finiteValue, -2), 2)
 }
 
 function normalizeAnimationPreset(value: unknown): PetVrmStageModelProfile['animationPreset'] {
@@ -306,12 +285,6 @@ function normalizeExpressionName(value: unknown): PetVrmStageModelProfile['expre
   return typeof value === 'string' && (PET_VRM_STAGE_EXPRESSION_NAMES as readonly string[]).includes(value)
     ? (value as PetVrmStageModelProfile['expression'])
     : 'neutral'
-}
-
-function normalizeBackgroundMode(value: unknown): PetVrmStageSceneSettings['backgroundMode'] {
-  return typeof value === 'string' && (PET_VRM_STAGE_BACKGROUND_MODES as readonly string[]).includes(value)
-    ? (value as PetVrmStageSceneSettings['backgroundMode'])
-    : PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS.backgroundMode
 }
 
 function getBroadcastChannel(): BroadcastChannel | null {

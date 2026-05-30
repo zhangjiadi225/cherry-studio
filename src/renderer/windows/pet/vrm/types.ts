@@ -20,10 +20,11 @@ export type PetVrmStageModelProfileMap = Map<string, PetVrmStageModelProfile>
 
 export type PetVrmStageModel = {
   enabled: boolean
-  homeXRatio: number
   id: string
   modelId: string
   order: number
+  positionX: number
+  positionY: number
   profile: PetVrmStageModelProfile
 }
 

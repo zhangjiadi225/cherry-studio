@@ -6795,6 +6795,7 @@
         "copy": "Copy"
       },
       "pasture_animals": "Pasture animals",
+      "pasture_settings": "2D pasture",
       "permission": {
         "allow_once": "Allow once",
         "deny": "Deny",
@@ -6850,12 +6851,6 @@
         "actors": "VRM actors",
         "add_actor": "Add actor",
         "ambient_light": "Ambient light",
-        "animation_mode": "Motion",
-        "animation_modes": {
-          "float": "Float",
-          "idle": "Idle",
-          "still": "Still"
-        },
         "animation_preset": "Animation",
         "animation_presets": {
           "vroid-greeting": "Greeting",
@@ -6866,15 +6861,7 @@
           "vroid-spin": "Spin",
           "vroid-squat": "Squat"
         },
-        "background_color": "Background color",
-        "background_mode": "Background",
-        "background_modes": {
-          "gradient": "Gradient",
-          "solid": "Solid",
-          "transparent": "Transparent"
-        },
         "blink": "Blink",
-        "camera_zoom": "Camera zoom",
         "delete": "Delete VRM model",
         "delete_actor": "Delete VRM actor",
         "delete_confirm": "Delete this VRM model?",
@@ -6905,19 +6892,18 @@
         "loading": "Loading VRM model...",
         "look_at_cursor": "Look at cursor",
         "model": "VRM model",
-        "model_scale": "Model scale",
         "models": "VRM models",
         "no_model_selected": "No VRM model",
         "no_models": "Import a VRM model first",
+        "position_x": "X coordinate",
+        "position_y": "Y coordinate",
         "preset_downloading": "Downloading",
         "preset_import_failed": "Failed to import {{name}}: {{reason}}",
         "preset_import_success": "{{name}} imported",
         "preset_imported": "Imported",
         "preset_source": "{{fileName}}, downloaded on demand",
         "presets": "Preset VRM models",
-        "scene_settings": "VRM scene",
-        "x_position": "X position",
-        "y_offset": "Y offset"
+        "scene_settings": "VRM lighting"
       },
       "window_width": "Window width",
       "window_width_value": "{{value}} px"

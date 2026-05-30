@@ -69,7 +69,7 @@ function MockVrmPastureScene({
   hitTestPoint?: { x: number; y: number } | null
   models: Array<{ id: string; modelId: string }>
   onHitTestTransparencyChange?: (transparent: boolean) => void
-  sceneSettings?: { backgroundMode?: string }
+  sceneSettings?: { keyLightIntensity?: number }
   stageHeight: number
   stageWidth: number
 }) {
@@ -79,8 +79,8 @@ function MockVrmPastureScene({
   }, [hitTestPoint, onHitTestTransparencyChange])
 
   return createElement('div', {
-    'data-background-mode': sceneSettings?.backgroundMode,
     'data-hit-test-point': hitTestPoint ? `${hitTestPoint.x},${hitTestPoint.y}` : '',
+    'data-key-light': sceneSettings?.keyLightIntensity == null ? '' : String(sceneSettings.keyLightIntensity),
     'data-model-ids': models.map((model) => model.modelId).join(','),
     'data-stage-height': String(stageHeight),
     'data-stage-width': String(stageWidth),
@@ -189,9 +189,6 @@ const preferenceMocks = vi.hoisted(() => ({
   vrmModelProfiles: {},
   vrmSceneSettings: {
     ambientLightIntensity: 2.2,
-    backgroundColor: '#101820',
-    backgroundMode: 'transparent',
-    cameraZoom: 1,
     fillLightIntensity: 1.2,
     keyLightIntensity: 2.8
   }
@@ -251,9 +248,6 @@ describe('PetWindowApp helpers', () => {
     preferenceMocks.vrmModelProfiles = {}
     preferenceMocks.vrmSceneSettings = {
       ambientLightIntensity: 2.2,
-      backgroundColor: '#101820',
-      backgroundMode: 'transparent',
-      cameraZoom: 1,
       fillLightIntensity: 1.2,
       keyLightIntensity: 2.8
     }
@@ -442,7 +436,7 @@ describe('PetWindowApp helpers', () => {
     const vrmScene = await screen.findByTestId('pet-vrm-scene')
 
     expect(vrmScene).toHaveAttribute('data-model-ids', 'model-a')
-    expect(vrmScene).toHaveAttribute('data-background-mode', 'transparent')
+    expect(vrmScene).toHaveAttribute('data-key-light', '2.8')
     expect(screen.queryByTestId('pet-pasture-background')).toBeNull()
     expect(screen.queryByTestId('pasture-animal-animal-a')).toBeNull()
     expect(screen.queryByLabelText('Show pet controls')).toBeNull()

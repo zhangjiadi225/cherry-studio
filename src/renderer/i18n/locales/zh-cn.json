@@ -6795,6 +6795,7 @@
         "copy": "复制"
       },
       "pasture_animals": "牧场动物",
+      "pasture_settings": "2D 牧场",
       "permission": {
         "allow_once": "允许一次",
         "deny": "拒绝",
@@ -6850,31 +6851,17 @@
         "actors": "VRM 角色",
         "add_actor": "添加角色",
         "ambient_light": "环境光",
-        "animation_mode": "动作",
-        "animation_modes": {
-          "float": "漂浮",
-          "idle": "待机",
-          "still": "静止"
-        },
         "animation_preset": "动作",
         "animation_presets": {
-          "vroid-show-full-body": "展示全身",
           "vroid-greeting": "问候",
+          "vroid-model-pose": "模特姿势",
           "vroid-peace-sign": "V 手势",
           "vroid-shoot": "射击",
+          "vroid-show-full-body": "展示全身",
           "vroid-spin": "转身",
-          "vroid-model-pose": "模特姿势",
           "vroid-squat": "屈伸运动"
         },
-        "background_color": "背景颜色",
-        "background_mode": "背景",
-        "background_modes": {
-          "gradient": "渐变",
-          "solid": "纯色",
-          "transparent": "透明"
-        },
         "blink": "眨眼",
-        "camera_zoom": "镜头缩放",
         "delete": "删除 VRM 模型",
         "delete_actor": "删除 VRM 角色",
         "delete_confirm": "确定要删除这个 VRM 模型吗？",
@@ -6905,19 +6892,18 @@
         "loading": "正在加载 VRM 模型...",
         "look_at_cursor": "注视鼠标",
         "model": "VRM 模型",
-        "model_scale": "模型缩放",
         "models": "VRM 模型",
         "no_model_selected": "未选择 VRM 模型",
         "no_models": "请先导入 VRM 模型",
+        "position_x": "X 坐标",
+        "position_y": "Y 坐标",
         "preset_downloading": "下载中",
         "preset_import_failed": "导入 {{name}} 失败：{{reason}}",
         "preset_import_success": "已导入 {{name}}",
         "preset_imported": "已导入",
         "preset_source": "{{fileName}}，点击后按需下载",
         "presets": "预设 VRM 模型",
-        "scene_settings": "VRM 场景",
-        "x_position": "横向位置",
-        "y_offset": "纵向偏移"
+        "scene_settings": "VRM 灯光"
       },
       "window_width": "窗口宽度",
       "window_width_value": "{{value}} px"

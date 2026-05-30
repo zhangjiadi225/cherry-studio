@@ -1,6 +1,5 @@
 import {
   Button,
-  Input,
   RowFlex,
   SegmentedControl,
   Select,
@@ -36,9 +35,7 @@ import type {
   PetPastureBounds,
   PetPastureSnapshot,
   PetSceneMode,
-  PetVrmStageAnimationMode,
   PetVrmStageAnimationPreset,
-  PetVrmStageBackgroundMode,
   PetVrmStageExpressionName,
   PetVrmStageModelProfile,
   PetVrmStageSceneSettings
@@ -54,9 +51,7 @@ import {
   PET_PASTURE_MAX_WIDTH,
   PET_PASTURE_MIN_WIDTH,
   PET_PERSONALITIES,
-  PET_VRM_STAGE_ANIMATION_MODES,
   PET_VRM_STAGE_ANIMATION_PRESETS,
-  PET_VRM_STAGE_BACKGROUND_MODES,
   PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS,
   PET_VRM_STAGE_EXPRESSION_NAMES,
   resolvePetRuntimeClip
@@ -76,13 +71,10 @@ const DEFAULT_PASTURE_BOUNDS: PetPastureBounds = { x: -1, y: -1, width: PET_PAST
 const PET_SCALE_STEP_PERCENT = 2
 const NO_AGENT_VALUE = '__none__'
 const PET_SCENE_MODE_OPTIONS: readonly PetSceneMode[] = ['sprite-pasture', 'vrm-stage']
-const PET_VRM_STAGE_SCALE_MIN_PERCENT = 50
-const PET_VRM_STAGE_SCALE_MAX_PERCENT = 180
-const PET_VRM_STAGE_Y_OFFSET_MIN = -120
-const PET_VRM_STAGE_Y_OFFSET_MAX = 160
+const PET_VRM_STAGE_POSITION_MIN = -2
+const PET_VRM_STAGE_POSITION_MAX = 2
+const PET_VRM_STAGE_POSITION_STEP = 0.05
 const PET_VRM_STAGE_LIGHT_PERCENT_MAX = 600
-const PET_VRM_STAGE_CAMERA_ZOOM_MIN_PERCENT = 75
-const PET_VRM_STAGE_CAMERA_ZOOM_MAX_PERCENT = 160
 
 const PetSettings: FC = () => {
   const { t } = useTranslation()
@@ -253,9 +245,10 @@ const PetSettings: FC = () => {
     const nextProfile = createPetVrmStageModelProfile(
       {
         enabled,
-        homeXRatio: currentProfile?.homeXRatio ?? getDefaultVrmStageModelXRatio(order),
         modelId: model.id,
-        order
+        order,
+        positionX: currentProfile?.positionX ?? getDefaultVrmStageModelPositionX(order),
+        positionY: currentProfile?.positionY ?? 0
       },
       currentProfile
     )
@@ -267,9 +260,10 @@ const PetSettings: FC = () => {
     const nextProfile = createPetVrmStageModelProfile(
       {
         enabled: currentProfile?.enabled ?? false,
-        homeXRatio: currentProfile?.homeXRatio ?? getDefaultVrmStageModelXRatio(order),
         modelId: model.id,
         order,
+        positionX: currentProfile?.positionX ?? getDefaultVrmStageModelPositionX(order),
+        positionY: currentProfile?.positionY ?? 0,
         ...patch
       },
       currentProfile
@@ -348,40 +342,6 @@ const PetSettings: FC = () => {
           <SettingRowTitle>{t('settings.pet.dnd_enabled')}</SettingRowTitle>
           <Switch checked={dndEnabled} onCheckedChange={setDndEnabled} />
         </SettingRow>
-        <SettingDivider />
-        <SettingSliderRow
-          label={t('settings.pet.window_width')}
-          valueLabel={t('settings.pet.window_width_value', { value: widthDraft })}
-          slider={
-            <Slider
-              value={[widthDraft]}
-              min={PET_PASTURE_MIN_WIDTH}
-              max={PET_PASTURE_MAX_WIDTH}
-              step={20}
-              onValueChange={([nextWidth = PET_PASTURE_DEFAULT_WIDTH]) => setWidthDraft(clampPastureWidth(nextWidth))}
-              onValueCommit={handleWidthCommit}
-              className="w-full"
-            />
-          }
-        />
-        <SettingDivider />
-        <SettingSliderRow
-          label={t('settings.pet.pet_size')}
-          valueLabel={t('settings.pet.pet_size_value', { value: scaleDraft })}
-          slider={
-            <Slider
-              value={[scaleDraft]}
-              min={PET_MIN_SCALE * 100}
-              max={PET_MAX_SCALE * 100}
-              step={PET_SCALE_STEP_PERCENT}
-              onValueChange={([nextScalePercent = Math.round(PET_DEFAULT_SCALE * 100)]) =>
-                setScaleDraft(clampPetScalePercent(nextScalePercent))
-              }
-              onValueCommit={handleScaleCommit}
-              className="w-full"
-            />
-          }
-        />
       </SettingGroup>
 
       <SettingGroup theme={theme}>
@@ -443,49 +403,29 @@ const PetSettings: FC = () => {
                         </div>
                         <div className="grid gap-3 sm:grid-cols-2">
                           <VrmModelSliderField
-                            label={t('settings.pet.vrm.model_scale')}
-                            valueLabel={formatPercent(effectiveProfile.scale ?? 1)}
-                            value={Math.round((effectiveProfile.scale ?? 1) * 100)}
-                            min={PET_VRM_STAGE_SCALE_MIN_PERCENT}
-                            max={PET_VRM_STAGE_SCALE_MAX_PERCENT}
-                            step={5}
+                            label={t('settings.pet.vrm.position_x')}
+                            valueLabel={formatCoordinate(effectiveProfile.positionX)}
+                            value={effectiveProfile.positionX}
+                            min={PET_VRM_STAGE_POSITION_MIN}
+                            max={PET_VRM_STAGE_POSITION_MAX}
+                            step={PET_VRM_STAGE_POSITION_STEP}
                             onCommit={(value) =>
-                              void handleVrmModelProfileChange(model, { scale: clampVrmModelScalePercent(value) / 100 })
+                              void handleVrmModelProfileChange(model, { positionX: clampVrmPosition(value) })
                             }
                           />
                           <VrmModelSliderField
-                            label={t('settings.pet.vrm.x_position')}
-                            valueLabel={formatPercent(effectiveProfile.homeXRatio)}
-                            value={Math.round(effectiveProfile.homeXRatio * 100)}
-                            min={0}
-                            max={100}
-                            step={5}
+                            label={t('settings.pet.vrm.position_y')}
+                            valueLabel={formatCoordinate(effectiveProfile.positionY)}
+                            value={effectiveProfile.positionY}
+                            min={PET_VRM_STAGE_POSITION_MIN}
+                            max={PET_VRM_STAGE_POSITION_MAX}
+                            step={PET_VRM_STAGE_POSITION_STEP}
                             onCommit={(value) =>
-                              void handleVrmModelProfileChange(model, { homeXRatio: clampPercent(value) / 100 })
+                              void handleVrmModelProfileChange(model, { positionY: clampVrmPosition(value) })
                             }
-                          />
-                          <VrmModelSliderField
-                            label={t('settings.pet.vrm.y_offset')}
-                            valueLabel={`${effectiveProfile.yOffset ?? 0} px`}
-                            value={effectiveProfile.yOffset ?? 0}
-                            min={PET_VRM_STAGE_Y_OFFSET_MIN}
-                            max={PET_VRM_STAGE_Y_OFFSET_MAX}
-                            step={5}
-                            onCommit={(value) =>
-                              void handleVrmModelProfileChange(model, { yOffset: clampVrmYOffset(value) })
-                            }
-                          />
-                          <VrmModelSliderField
-                            label={t('settings.pet.vrm.layer_order')}
-                            valueLabel={String(effectiveProfile.order)}
-                            value={effectiveProfile.order}
-                            min={0}
-                            max={Math.max(4, vrmModels.length - 1)}
-                            step={1}
-                            onCommit={(value) => void handleVrmModelProfileChange(model, { order: Math.round(value) })}
                           />
                         </div>
-                        <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="grid gap-3 sm:grid-cols-2">
                           <PetPackageSelectField label={t('settings.pet.vrm.animation_preset')}>
                             <Select
                               value={effectiveProfile.animationPreset ?? 'vroid-show-full-body'}
@@ -500,25 +440,6 @@ const PetSettings: FC = () => {
                                 {PET_VRM_STAGE_ANIMATION_PRESETS.map((preset) => (
                                   <SelectItem key={preset} value={preset}>
                                     {t(`settings.pet.vrm.animation_presets.${preset}`)}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </PetPackageSelectField>
-                          <PetPackageSelectField label={t('settings.pet.vrm.animation_mode')}>
-                            <Select
-                              value={effectiveProfile.animationMode ?? 'idle'}
-                              onValueChange={(value) =>
-                                isPetVrmStageAnimationMode(value) &&
-                                void handleVrmModelProfileChange(model, { animationMode: value })
-                              }>
-                              <SelectTrigger size="sm" className="w-full">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {PET_VRM_STAGE_ANIMATION_MODES.map((mode) => (
-                                  <SelectItem key={mode} value={mode}>
-                                    {t(`settings.pet.vrm.animation_modes.${mode}`)}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -555,6 +476,15 @@ const PetSettings: FC = () => {
                                 expressionIntensity: clampPercent(value) / 100
                               })
                             }
+                          />
+                          <VrmModelSliderField
+                            label={t('settings.pet.vrm.layer_order')}
+                            valueLabel={String(effectiveProfile.order)}
+                            value={effectiveProfile.order}
+                            min={0}
+                            max={Math.max(4, vrmModels.length - 1)}
+                            step={1}
+                            onCommit={(value) => void handleVrmModelProfileChange(model, { order: Math.round(value) })}
                           />
                         </div>
                         <div className="grid gap-2 sm:grid-cols-3">
@@ -593,53 +523,6 @@ const PetSettings: FC = () => {
           <SettingTitle>{t('settings.pet.vrm.scene_settings')}</SettingTitle>
           <SettingDivider />
           <div className="grid gap-3">
-            <SettingRow className="gap-3">
-              <SettingRowTitle>{t('settings.pet.vrm.background_mode')}</SettingRowTitle>
-              <SegmentedControl<PetVrmStageBackgroundMode>
-                value={vrmSceneSettings.backgroundMode}
-                onValueChange={(backgroundMode) => void handleVrmSceneSettingsChange({ backgroundMode })}
-                options={PET_VRM_STAGE_BACKGROUND_MODES.map((mode) => ({
-                  value: mode,
-                  label: t(`settings.pet.vrm.background_modes.${mode}`)
-                }))}
-                size="sm"
-              />
-            </SettingRow>
-            {vrmSceneSettings.backgroundMode !== 'transparent' ? (
-              <>
-                <SettingDivider />
-                <SettingRow className="gap-3">
-                  <SettingRowTitle>{t('settings.pet.vrm.background_color')}</SettingRowTitle>
-                  <Input
-                    aria-label={t('settings.pet.vrm.background_color')}
-                    className="h-8 w-28"
-                    type="color"
-                    value={vrmSceneSettings.backgroundColor}
-                    onChange={(event) =>
-                      void handleVrmSceneSettingsChange({ backgroundColor: event.currentTarget.value })
-                    }
-                  />
-                </SettingRow>
-              </>
-            ) : null}
-            <SettingDivider />
-            <SettingSliderRow
-              label={t('settings.pet.vrm.camera_zoom')}
-              valueLabel={formatPercent(vrmSceneSettings.cameraZoom)}
-              slider={
-                <Slider
-                  value={[Math.round(vrmSceneSettings.cameraZoom * 100)]}
-                  min={PET_VRM_STAGE_CAMERA_ZOOM_MIN_PERCENT}
-                  max={PET_VRM_STAGE_CAMERA_ZOOM_MAX_PERCENT}
-                  step={5}
-                  onValueCommit={([value = 100]) =>
-                    void handleVrmSceneSettingsChange({ cameraZoom: clampVrmCameraZoomPercent(value) / 100 })
-                  }
-                  className="w-full"
-                />
-              }
-            />
-            <SettingDivider />
             <SettingSliderRow
               label={t('settings.pet.vrm.key_light')}
               valueLabel={formatPercent(vrmSceneSettings.keyLightIntensity)}
@@ -691,6 +574,46 @@ const PetSettings: FC = () => {
               }
             />
           </div>
+        </SettingGroup>
+      ) : null}
+
+      {spriteSceneEnabled ? (
+        <SettingGroup theme={theme}>
+          <SettingTitle>{t('settings.pet.pasture_settings')}</SettingTitle>
+          <SettingDivider />
+          <SettingSliderRow
+            label={t('settings.pet.window_width')}
+            valueLabel={t('settings.pet.window_width_value', { value: widthDraft })}
+            slider={
+              <Slider
+                value={[widthDraft]}
+                min={PET_PASTURE_MIN_WIDTH}
+                max={PET_PASTURE_MAX_WIDTH}
+                step={20}
+                onValueChange={([nextWidth = PET_PASTURE_DEFAULT_WIDTH]) => setWidthDraft(clampPastureWidth(nextWidth))}
+                onValueCommit={handleWidthCommit}
+                className="w-full"
+              />
+            }
+          />
+          <SettingDivider />
+          <SettingSliderRow
+            label={t('settings.pet.pet_size')}
+            valueLabel={t('settings.pet.pet_size_value', { value: scaleDraft })}
+            slider={
+              <Slider
+                value={[scaleDraft]}
+                min={PET_MIN_SCALE * 100}
+                max={PET_MAX_SCALE * 100}
+                step={PET_SCALE_STEP_PERCENT}
+                onValueChange={([nextScalePercent = Math.round(PET_DEFAULT_SCALE * 100)]) =>
+                  setScaleDraft(clampPetScalePercent(nextScalePercent))
+                }
+                onValueCommit={handleScaleCommit}
+                className="w-full"
+              />
+            }
+          />
         </SettingGroup>
       ) : null}
 
@@ -799,7 +722,7 @@ const SettingSliderRow: FC<{ label: string; valueLabel: string; slider: ReactNod
   slider,
   valueLabel
 }) => (
-  <div className="grid gap-2">
+  <div className="grid gap-2" role="group" aria-label={label}>
     <div className="flex items-center justify-between gap-3">
       <SettingRowTitle>{label}</SettingRowTitle>
       <span className="font-medium text-foreground-muted text-xs">{valueLabel}</span>
@@ -886,9 +809,10 @@ function getEffectiveVrmModelProfile(
   const order = getNextVrmStageModelOrder(profiles)
   return createPetVrmStageModelProfile({
     enabled: false,
-    homeXRatio: getDefaultVrmStageModelXRatio(order),
     modelId: model.id,
-    order
+    order,
+    positionX: getDefaultVrmStageModelPositionX(order),
+    positionY: 0
   })
 }
 
@@ -900,8 +824,10 @@ function getNextVrmStageModelOrder(profiles: PetVrmStageModelProfileMap): number
   return order + 1
 }
 
-function getDefaultVrmStageModelXRatio(order: number): number {
-  return order <= 0 ? 0.5 : Math.min(0.9, 0.18 + order * 0.16)
+function getDefaultVrmStageModelPositionX(order: number): number {
+  if (order <= 0) return 0
+  const direction = order % 2 === 0 ? 1 : -1
+  return direction * Math.min(1.2, 0.45 + Math.floor((order - 1) / 2) * 0.35)
 }
 
 function clampPastureWidth(width: number): number {
@@ -914,31 +840,14 @@ function clampPetScalePercent(percent: number): number {
   return Math.round(clampPetScale(finitePercent / 100) * 100)
 }
 
-function clampPercent(percent: number): number {
-  const finitePercent = Number.isFinite(percent) ? percent : 100
-  return Math.round(Math.min(Math.max(finitePercent, 0), 100))
-}
-
 function clampLightPercent(percent: number): number {
   const finitePercent = Number.isFinite(percent) ? percent : 100
   return Math.round(Math.min(Math.max(finitePercent, 0), PET_VRM_STAGE_LIGHT_PERCENT_MAX))
 }
 
-function clampVrmCameraZoomPercent(percent: number): number {
-  const finitePercent = Number.isFinite(percent) ? percent : 100
-  return Math.round(
-    Math.min(Math.max(finitePercent, PET_VRM_STAGE_CAMERA_ZOOM_MIN_PERCENT), PET_VRM_STAGE_CAMERA_ZOOM_MAX_PERCENT)
-  )
-}
-
-function clampVrmModelScalePercent(percent: number): number {
-  const finitePercent = Number.isFinite(percent) ? percent : 100
-  return Math.round(Math.min(Math.max(finitePercent, PET_VRM_STAGE_SCALE_MIN_PERCENT), PET_VRM_STAGE_SCALE_MAX_PERCENT))
-}
-
-function clampVrmYOffset(offset: number): number {
-  const finiteOffset = Number.isFinite(offset) ? offset : 0
-  return Math.round(Math.min(Math.max(finiteOffset, PET_VRM_STAGE_Y_OFFSET_MIN), PET_VRM_STAGE_Y_OFFSET_MAX))
+function clampVrmPosition(position: number): number {
+  const finitePosition = Number.isFinite(position) ? position : 0
+  return Number(Math.min(Math.max(finitePosition, PET_VRM_STAGE_POSITION_MIN), PET_VRM_STAGE_POSITION_MAX).toFixed(2))
 }
 
 function formatPercent(value: number): string {
@@ -953,8 +862,8 @@ function percentToPetScale(percent: number): number {
   return clampPetScalePercent(percent) / 100
 }
 
-function isPetVrmStageAnimationMode(value: string): value is PetVrmStageAnimationMode {
-  return (PET_VRM_STAGE_ANIMATION_MODES as readonly string[]).includes(value)
+function formatCoordinate(value: number): string {
+  return value.toFixed(2)
 }
 
 function isPetVrmStageAnimationPreset(value: string): value is PetVrmStageAnimationPreset {

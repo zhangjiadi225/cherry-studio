@@ -76,11 +76,11 @@ export type PetPackageInfo = PetPackageMetadata & {
   spriteUrl: string
 }
 
-export const PET_ASSET_KINDS = ['sprite-package', 'vrm-model', 'scene-background'] as const
+export const PET_ASSET_KINDS = ['sprite-package', 'vrm-model'] as const
 
 export type PetAssetKind = (typeof PET_ASSET_KINDS)[number]
 
-export type PetAssetFileRole = 'background' | 'manifest' | 'model' | 'sprite' | 'thumbnail'
+export type PetAssetFileRole = 'manifest' | 'model' | 'sprite' | 'thumbnail'
 
 export type PetAssetFileInfo = {
   role: PetAssetFileRole
@@ -225,10 +225,6 @@ export type PetSceneProfile = {
   updatedAt: number
 }
 
-export const PET_VRM_STAGE_ANIMATION_MODES = ['still', 'idle', 'float'] as const
-
-export type PetVrmStageAnimationMode = (typeof PET_VRM_STAGE_ANIMATION_MODES)[number]
-
 export const PET_VRM_STAGE_ANIMATION_PRESETS = [
   'vroid-show-full-body',
   'vroid-greeting',
@@ -245,44 +241,32 @@ export const PET_VRM_STAGE_EXPRESSION_NAMES = ['neutral', 'happy', 'relaxed', 's
 
 export type PetVrmStageExpressionName = (typeof PET_VRM_STAGE_EXPRESSION_NAMES)[number]
 
-export const PET_VRM_STAGE_BACKGROUND_MODES = ['transparent', 'solid', 'gradient'] as const
-
-export type PetVrmStageBackgroundMode = (typeof PET_VRM_STAGE_BACKGROUND_MODES)[number]
-
 export type PetVrmStageSceneSettings = {
   ambientLightIntensity: number
-  backgroundColor: string
-  backgroundMode: PetVrmStageBackgroundMode
-  cameraZoom: number
   fillLightIntensity: number
   keyLightIntensity: number
 }
 
 export const PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS: PetVrmStageSceneSettings = {
   ambientLightIntensity: 2.2,
-  backgroundColor: '#101820',
-  backgroundMode: 'transparent',
-  cameraZoom: 1,
   fillLightIntensity: 1.2,
   keyLightIntensity: 2.8
 }
 
 export type PetVrmStageModelProfile = {
-  animationMode?: PetVrmStageAnimationMode
   animationPreset?: PetVrmStageAnimationPreset
   blink?: boolean
   createdAt: number
   enabled: boolean
   expression?: PetVrmStageExpressionName
   expressionIntensity?: number
-  homeXRatio: number
   idleMotion?: boolean
   lookAtCursor?: boolean
   modelId: string
   order: number
-  scale?: number
+  positionX: number
+  positionY: number
   updatedAt: number
-  yOffset?: number
 }
 
 export type PetVrmStageModelProfileRecord = Record<string, PetVrmStageModelProfile>

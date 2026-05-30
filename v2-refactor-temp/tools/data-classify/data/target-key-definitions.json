@@ -239,7 +239,7 @@
     {
       "targetKey": "feature.pet.vrm.model_profiles",
       "type": "PreferenceTypes.PetVrmStageModelProfileRecord",
-      "defaultValue": "VALUE: {}",
+      "defaultValue": "VALUE: {} as PreferenceTypes.PetVrmStageModelProfileRecord",
       "status": "classified",
       "description": "VRM stage model display profiles"
     },
@@ -248,14 +248,11 @@
       "type": "PreferenceTypes.PetVrmStageSceneSettings",
       "defaultValue": {
         "ambientLightIntensity": 2.2,
-        "backgroundColor": "#101820",
-        "backgroundMode": "transparent",
-        "cameraZoom": 1,
         "fillLightIntensity": 1.2,
         "keyLightIntensity": 2.8
       },
       "status": "classified",
-      "description": "VRM stage pure 3D scene camera, light, and background settings"
+      "description": "VRM stage light settings"
     },
     {
       "targetKey": "feature.pet.vrm.window_bounds",

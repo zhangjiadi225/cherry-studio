@@ -32,10 +32,7 @@ import {
 
 const PET_ASSET_MANIFEST_FILE = 'asset.json'
 const PET_VRM_MODEL_FILE = 'model.vrm'
-const PET_SCENE_BACKGROUND_FILE = 'background'
 const PET_VRM_MAX_BYTES = 200 * 1024 * 1024
-const PET_SCENE_IMAGE_MAX_BYTES = 32 * 1024 * 1024
-const PET_SCENE_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp'])
 const PET_VRM_EXTENSIONS = new Set(['.vrm'])
 
 type StoredPetAssetManifest = PetAssetInfo
@@ -62,8 +59,6 @@ export class PetAssetService extends BaseService {
         return this.spritePackageToAsset(await this.importSpritePackage(request.sourcePath))
       case 'vrm-model':
         return this.importVrmModelFromPath(request)
-      case 'scene-background':
-        return this.importSceneBackgroundFromPath(request)
     }
   }
 
@@ -81,9 +76,6 @@ export class PetAssetService extends BaseService {
       case 'vrm-model':
         await this.deleteManagedAsset('vrm-model', request.assetId)
         return
-      case 'scene-background':
-        await this.deleteManagedAsset('scene-background', request.assetId)
-        return
     }
   }
 
@@ -93,7 +85,6 @@ export class PetAssetService extends BaseService {
       case 'sprite-package':
         return this.resolveSpritePackageAsset(request)
       case 'vrm-model':
-      case 'scene-background':
         return this.resolveManagedAsset(request)
     }
   }
@@ -135,14 +126,11 @@ export class PetAssetService extends BaseService {
       case 'sprite-package':
         return (await this.listSpritePackages()).map((petPackage) => this.spritePackageToAsset(petPackage))
       case 'vrm-model':
-      case 'scene-background':
         return this.listManagedAssets(kind)
     }
   }
 
-  private async listManagedAssets(
-    kind: Extract<PetAssetKind, 'scene-background' | 'vrm-model'>
-  ): Promise<PetAssetInfo[]> {
+  private async listManagedAssets(kind: Extract<PetAssetKind, 'vrm-model'>): Promise<PetAssetInfo[]> {
     const root = this.getManagedAssetRoot(kind)
     await fs.mkdir(root, { recursive: true })
     const entries = await fs.readdir(root, { withFileTypes: true })
@@ -236,42 +224,6 @@ export class PetAssetService extends BaseService {
     return asset
   }
 
-  private async importSceneBackgroundFromPath(request: PetAssetImportRequest): Promise<PetAssetInfo> {
-    const sourcePath = parseSourcePath(request.sourcePath)
-    const sourceStat = await fs.stat(sourcePath)
-    if (!sourceStat.isFile()) throw new Error('Scene background source must be a file')
-    validateFileExtension(sourcePath, PET_SCENE_IMAGE_EXTENSIONS, 'Only PNG, JPG, and WebP scene images are supported')
-    validateMaxBytes(sourceStat.size, PET_SCENE_IMAGE_MAX_BYTES, 'Scene background')
-
-    const originalFileName = request.originalFileName?.trim() || path.basename(sourcePath)
-    const extension = path.extname(originalFileName).toLowerCase()
-    const relativePath = `${PET_SCENE_BACKGROUND_FILE}${extension}`
-    const assetId = createPetAssetId('scene', originalFileName)
-    const assetDir = path.join(this.getManagedAssetRoot('scene-background'), assetId)
-    const targetPath = path.join(assetDir, relativePath)
-    const now = Date.now()
-    const asset: PetAssetInfo = {
-      id: assetId,
-      kind: 'scene-background',
-      displayName: request.displayName?.trim() || stripExtension(originalFileName),
-      originalFileName,
-      createdAt: now,
-      updatedAt: now,
-      sizeBytes: sourceStat.size,
-      files: [
-        {
-          role: 'background',
-          relativePath,
-          mediaType: request.mediaType?.trim() || getSceneImageMediaType(extension),
-          sizeBytes: sourceStat.size
-        }
-      ]
-    }
-
-    await this.writeImportedFileAsset(assetDir, targetPath, sourcePath, asset)
-    return asset
-  }
-
   private async writeImportedFileAsset(
     assetDir: string,
     targetPath: string,
@@ -307,7 +259,7 @@ export class PetAssetService extends BaseService {
   }
 
   private async resolveManagedAsset(request: PetAssetResolveRequest): Promise<PetAssetResolveResult | null> {
-    if (request.kind !== 'vrm-model' && request.kind !== 'scene-background') return null
+    if (request.kind !== 'vrm-model') return null
     const assetDir = this.getManagedAssetDir(request.kind, request.assetId)
     try {
       const asset = await this.readAssetManifest(assetDir, request.kind)
@@ -334,10 +286,7 @@ export class PetAssetService extends BaseService {
     }
   }
 
-  private async deleteManagedAsset(
-    kind: Extract<PetAssetKind, 'scene-background' | 'vrm-model'>,
-    assetId: string
-  ): Promise<void> {
+  private async deleteManagedAsset(kind: Extract<PetAssetKind, 'vrm-model'>, assetId: string): Promise<void> {
     const assetDir = this.getManagedAssetDir(kind, parseAssetId(assetId))
     if (!isPathInside(this.getManagedAssetRoot(kind), assetDir)) {
       throw new Error('Pet asset target must stay inside the managed root')
@@ -347,7 +296,7 @@ export class PetAssetService extends BaseService {
 
   private async readAssetManifest(
     assetDir: string,
-    expectedKind: Extract<PetAssetKind, 'scene-background' | 'vrm-model'>
+    expectedKind: Extract<PetAssetKind, 'vrm-model'>
   ): Promise<PetAssetInfo> {
     const manifestPath = path.join(assetDir, PET_ASSET_MANIFEST_FILE)
     const parsed = JSON.parse(await fs.readFile(manifestPath, 'utf8')) as Partial<PetAssetInfo>
@@ -383,16 +332,14 @@ export class PetAssetService extends BaseService {
     return path.join(this.getFeatureRoot(), 'assets', 'sprite', 'packages')
   }
 
-  private getManagedAssetRoot(kind: Extract<PetAssetKind, 'scene-background' | 'vrm-model'>): string {
+  private getManagedAssetRoot(kind: Extract<PetAssetKind, 'vrm-model'>): string {
     switch (kind) {
       case 'vrm-model':
         return path.join(this.getFeatureRoot(), 'assets', 'vrm', 'models')
-      case 'scene-background':
-        return path.join(this.getFeatureRoot(), 'assets', 'scene', 'backgrounds')
     }
   }
 
-  private getManagedAssetDir(kind: Extract<PetAssetKind, 'scene-background' | 'vrm-model'>, assetId: string): string {
+  private getManagedAssetDir(kind: Extract<PetAssetKind, 'vrm-model'>, assetId: string): string {
     const root = this.getManagedAssetRoot(kind)
     const assetDir = path.join(root, parseAssetId(assetId))
     if (!isPathInside(root, assetDir)) {
@@ -467,13 +414,7 @@ function parseAssetKind(value: unknown): PetAssetKind {
 }
 
 function parseAssetFileRole(value: unknown): PetAssetFileRole {
-  if (
-    value === 'background' ||
-    value === 'manifest' ||
-    value === 'model' ||
-    value === 'sprite' ||
-    value === 'thumbnail'
-  ) {
+  if (value === 'manifest' || value === 'model' || value === 'sprite' || value === 'thumbnail') {
     return value
   }
   throw new Error('Unsupported pet asset file role')
@@ -571,8 +512,6 @@ function getDefaultFileRole(kind: PetAssetKind): PetAssetFileRole {
       return 'sprite'
     case 'vrm-model':
       return 'model'
-    case 'scene-background':
-      return 'background'
   }
 }
 
@@ -604,19 +543,6 @@ function sanitizePetAssetName(name: string): string {
 
 function stripExtension(fileName: string): string {
   return path.basename(fileName, path.extname(fileName))
-}
-
-function getSceneImageMediaType(extension: string): string {
-  switch (extension) {
-    case '.jpg':
-    case '.jpeg':
-      return 'image/jpeg'
-    case '.webp':
-      return 'image/webp'
-    case '.png':
-    default:
-      return 'image/png'
-  }
 }
 
 function comparePetAssets(left: PetAssetInfo, right: PetAssetInfo): number {

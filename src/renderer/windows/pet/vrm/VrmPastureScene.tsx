@@ -1,5 +1,5 @@
 import { VRMExpressionPresetName } from '@pixiv/three-vrm'
-import { PET_DEFAULT_SCALE, PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS, type PetVrmStageAnimationPreset } from '@shared/pet'
+import { PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS, type PetVrmStageAnimationPreset } from '@shared/pet'
 import type { FC } from 'react'
 import { useEffect, useRef } from 'react'
 import {
@@ -8,7 +8,6 @@ import {
   AnimationMixer,
   Box3,
   Clock,
-  Color,
   DirectionalLight,
   HemisphereLight,
   Mesh,
@@ -52,7 +51,6 @@ type VrmPastureSceneProps = {
   models: PetVrmStageModel[]
   onHitTestTransparencyChange?: (transparent: boolean) => void
   onModelLoadStateChange?: (state: PetVrmStageModelLoadState) => void
-  petScale?: number
   sceneSettings?: PetVrmStageSceneSettings
   stageHeight: number
   stageWidth: number
@@ -64,7 +62,6 @@ type SceneRuntime = {
   camera: PerspectiveCamera
   cameraDistance: number
   cameraDirection: Vector3
-  cameraZoom: number
   clock: Clock
   controls: OrbitControls
   directionalLight: DirectionalLight
@@ -96,8 +93,8 @@ type VrmModelRuntime = {
   modelId: string
   objectUrlRevoke?: () => void
   order: number
-  scale: number
-  xRatio: number
+  positionX: number
+  positionY: number
 }
 
 export type VrmStageSceneBootstrap = {
@@ -149,7 +146,6 @@ const VrmPastureScene: FC<VrmPastureSceneProps> = ({
   models,
   onHitTestTransparencyChange,
   onModelLoadStateChange,
-  petScale = PET_DEFAULT_SCALE,
   sceneSettings = PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS,
   stageHeight,
   stageWidth
@@ -162,7 +158,6 @@ const VrmPastureScene: FC<VrmPastureSceneProps> = ({
     models,
     onHitTestTransparencyChange,
     onModelLoadStateChange,
-    petScale,
     sceneSettings,
     stageHeight,
     stageWidth
@@ -174,7 +169,6 @@ const VrmPastureScene: FC<VrmPastureSceneProps> = ({
     models,
     onHitTestTransparencyChange,
     onModelLoadStateChange,
-    petScale,
     sceneSettings,
     stageHeight,
     stageWidth
@@ -247,7 +241,6 @@ const VrmPastureScene: FC<VrmPastureSceneProps> = ({
       camera,
       cameraDistance: VRM_STAGE_DEFAULT_CAMERA_DISTANCE,
       cameraDirection: VRM_STAGE_DEFAULT_CAMERA_POSITION.clone().normalize(),
-      cameraZoom: initialProps.sceneSettings.cameraZoom,
       clock: new Clock(),
       controls,
       directionalLight,
@@ -306,7 +299,6 @@ const VrmPastureScene: FC<VrmPastureSceneProps> = ({
       ref={canvasRef}
       data-testid="pet-vrm-scene"
       style={{
-        background: getVrmCanvasBackground(sceneSettings),
         bottom: 0,
         height: stageHeight,
         left: 0,
@@ -401,8 +393,8 @@ function createVrmModelRuntime(model: PetVrmStageModel): VrmModelRuntime {
     loading: false,
     modelId: '',
     order: 0,
-    scale: 1,
-    xRatio: model.homeXRatio
+    positionX: model.positionX,
+    positionY: model.positionY
   }
 }
 
@@ -539,34 +531,12 @@ function updateVrmModelTransform(
   const loaded = modelRuntime.loaded
   if (!loaded || modelRuntime.loading) return
 
-  if (modelRuntime.xRatio !== model.homeXRatio) {
-    modelRuntime.xRatio = model.homeXRatio
-  }
-
-  const scale = getVrmModelProfileScale(model) * getPetScaleMultiplier(props.petScale ?? PET_DEFAULT_SCALE)
-  if (Math.abs(modelRuntime.scale - scale) > 1e-6) {
-    modelRuntime.scale = scale
-    modelRuntime.bootstrapped = false
-  }
-
-  loaded.root.scale.setScalar(scale)
-  loaded.root.position.set(0, getVrmModelYOffset(model), getVrmDepthForOrder(model.order))
+  modelRuntime.positionX = model.positionX
+  modelRuntime.positionY = model.positionY
+  loaded.root.scale.setScalar(1)
+  loaded.root.position.set(model.positionX, model.positionY, getVrmDepthForOrder(model.order))
   modelRuntime.animationMixer?.update(delta)
   applyVrmModelPose(modelRuntime, loaded, model, gazeTarget, lookAtKey, delta)
-}
-
-function getVrmModelProfileScale(model: PetVrmStageModel): number {
-  const scale = model.profile.scale ?? 1
-  return Number.isFinite(scale) && scale > 0 ? scale : 1
-}
-
-function getPetScaleMultiplier(petScale: number): number {
-  return Number.isFinite(petScale) && petScale > 0 ? petScale / PET_DEFAULT_SCALE : 1
-}
-
-function getVrmModelYOffset(model: PetVrmStageModel): number {
-  const offset = model.profile.yOffset ?? 0
-  return Number.isFinite(offset) ? offset / 100 : 0
 }
 
 function bootstrapFirstReadyModel(runtime: SceneRuntime): void {
@@ -711,31 +681,18 @@ function getVrmDepthForOrder(order: number): number {
 }
 
 function applySceneSettings(runtime: SceneRuntime, settings: PetVrmStageSceneSettings): void {
-  runtime.ambientLight.intensity = VRM_STAGE_AMBIENT_LIGHT_INTENSITY
-  runtime.hemisphereLight.intensity = VRM_STAGE_HEMISPHERE_LIGHT_INTENSITY
-  runtime.directionalLight.intensity = VRM_STAGE_KEY_LIGHT_INTENSITY
-  runtime.cameraZoom = getCameraZoom(settings.cameraZoom)
+  runtime.ambientLight.intensity = settings.ambientLightIntensity
+  runtime.hemisphereLight.intensity = settings.fillLightIntensity
+  runtime.directionalLight.intensity = settings.keyLightIntensity
+  runtime.scene.background = null
+  runtime.renderer.setClearColor(0x000000, 0)
   applyCameraPosition(runtime)
-
-  if (settings.backgroundMode === 'transparent' || settings.backgroundMode === 'gradient') {
-    runtime.scene.background = null
-    runtime.renderer.setClearColor(0x000000, 0)
-    return
-  }
-
-  runtime.scene.background = new Color(settings.backgroundColor)
-  runtime.renderer.setClearColor(settings.backgroundColor, 1)
-}
-
-function getCameraZoom(zoom: number): number {
-  return Number.isFinite(zoom) && zoom > 0 ? zoom : 1
 }
 
 function applyCameraPosition(runtime: SceneRuntime): void {
-  const distance = runtime.cameraDistance / runtime.cameraZoom
   runtime.applyingCameraState = true
   try {
-    runtime.camera.position.copy(runtime.modelOrigin).addScaledVector(runtime.cameraDirection, distance)
+    runtime.camera.position.copy(runtime.modelOrigin).addScaledVector(runtime.cameraDirection, runtime.cameraDistance)
     runtime.camera.lookAt(runtime.modelOrigin)
     runtime.camera.updateProjectionMatrix()
     runtime.controls.target.copy(runtime.modelOrigin)
@@ -751,7 +708,7 @@ function syncCameraStateFromOrbitControls(runtime: SceneRuntime): void {
   runtime.cameraDirection.copy(runtime.camera.position).sub(runtime.modelOrigin)
   if (runtime.cameraDirection.lengthSq() <= 1e-6) return
   runtime.cameraDirection.normalize()
-  runtime.cameraDistance = runtime.controls.getDistance() * runtime.cameraZoom
+  runtime.cameraDistance = runtime.controls.getDistance()
 }
 
 function setOrbitControlsEnabled(runtime: SceneRuntime, enabled: boolean): void {
@@ -769,11 +726,10 @@ function applyVrmModelPose(
   delta: number
 ): void {
   const idleMotion = model.profile.idleMotion ?? true
-  const animationMode = model.profile.animationMode ?? 'idle'
   const expressionManager = loaded.vrm.expressionManager
 
   if (modelRuntime.animationMixer) {
-    modelRuntime.animationMixer.timeScale = idleMotion && animationMode !== 'still' ? 1 : 0
+    modelRuntime.animationMixer.timeScale = idleMotion ? 1 : 0
   }
 
   applyExpression(model, expressionManager)
@@ -966,13 +922,5 @@ const PET_VRM_EXPRESSION_PRESET_BY_NAME = {
   angry: VRMExpressionPresetName.Angry,
   sad: VRMExpressionPresetName.Sad
 } as const
-
-function getVrmCanvasBackground(settings: PetVrmStageSceneSettings): string | undefined {
-  if (settings.backgroundMode === 'solid') return settings.backgroundColor
-  if (settings.backgroundMode === 'gradient') {
-    return `linear-gradient(180deg, ${settings.backgroundColor} 0%, transparent 100%)`
-  }
-  return undefined
-}
 
 export default VrmPastureScene

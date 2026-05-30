@@ -233,10 +233,14 @@ describe('PetSettings', () => {
     render(<PetSettings />)
 
     expect(await screen.findByText('settings.pet.vrm.models')).toBeInTheDocument()
-    expect(await screen.findByText('settings.pet.vrm.model_scale')).toBeInTheDocument()
+    expect(await screen.findByText('settings.pet.vrm.position_x')).toBeInTheDocument()
+    expect(screen.getByText('settings.pet.vrm.position_y')).toBeInTheDocument()
+    expect(screen.getByText('settings.pet.vrm.animation_preset')).toBeInTheDocument()
     expect(screen.getByText('settings.pet.vrm.scene_settings')).toBeInTheDocument()
     expect(screen.getByText('settings.pet.vrm.expression')).toBeInTheDocument()
     expect(screen.getByText('settings.pet.vrm.look_at_cursor')).toBeInTheDocument()
+    expect(screen.queryByText('settings.pet.window_width')).not.toBeInTheDocument()
+    expect(screen.queryByText('settings.pet.pet_size')).not.toBeInTheDocument()
     expect(screen.queryByText('settings.pet.vrm.presets')).not.toBeInTheDocument()
     expect(screen.queryByText('settings.pet.vrm.preset_source')).not.toBeInTheDocument()
     expect(screen.queryByText('settings.pet.packages')).not.toBeInTheDocument()
@@ -292,14 +296,14 @@ describe('PetSettings', () => {
 
     render(<PetSettings />)
 
-    const modelScaleControl = await screen.findByRole('group', { name: 'settings.pet.vrm.model_scale' })
+    const positionXControl = await screen.findByRole('group', { name: 'settings.pet.vrm.position_x' })
 
-    fireEvent.click(within(modelScaleControl).getByRole('button', { name: 'slider-commit-max' }))
+    fireEvent.click(within(positionXControl).getByRole('button', { name: 'slider-commit-max' }))
 
     await waitFor(() => {
       expect(MockUsePreferenceUtils.getPreferenceValue('feature.pet.vrm.model_profiles')).toMatchObject({
         'model-a': {
-          scale: 1.8
+          positionX: 2
         }
       })
     })
@@ -314,11 +318,12 @@ describe('PetSettings', () => {
       })
     })
 
-    fireEvent.click(screen.getByText('settings.pet.vrm.background_modes.solid'))
+    const keyLightControl = await screen.findByRole('group', { name: 'settings.pet.vrm.key_light' })
+    fireEvent.click(within(keyLightControl).getByRole('button', { name: 'slider-commit-max' }))
 
     await waitFor(() => {
       expect(MockUsePreferenceUtils.getPreferenceValue('feature.pet.vrm.scene_settings')).toMatchObject({
-        backgroundMode: 'solid'
+        keyLightIntensity: 6
       })
     })
   })
@@ -329,15 +334,15 @@ describe('PetSettings', () => {
 
     render(<PetSettings />)
 
-    const modelScaleControl = await screen.findByRole('group', { name: 'settings.pet.vrm.model_scale' })
+    const positionXControl = await screen.findByRole('group', { name: 'settings.pet.vrm.position_x' })
 
-    fireEvent.click(within(modelScaleControl).getByRole('button', { name: 'slider-commit-max' }))
+    fireEvent.click(within(positionXControl).getByRole('button', { name: 'slider-commit-max' }))
 
     await waitFor(() => {
       expect(MockUsePreferenceUtils.getPreferenceValue('feature.pet.vrm.model_profiles')).toMatchObject({
         'model-a': {
           enabled: false,
-          scale: 1.8
+          positionX: 2
         }
       })
     })
