@@ -20,6 +20,7 @@ import { Route as SettingsScheduledTasksRouteImport } from './routes/settings/sc
 import { Route as SettingsQuickAssistantRouteImport } from './routes/settings/quick-assistant'
 import { Route as SettingsProviderRouteImport } from './routes/settings/provider'
 import { Route as SettingsPluginsRouteImport } from './routes/settings/plugins'
+import { Route as SettingsPetRouteImport } from './routes/settings/pet'
 import { Route as SettingsModelRouteImport } from './routes/settings/model'
 import { Route as SettingsMcpRouteImport } from './routes/settings/mcp'
 import { Route as SettingsIntegrationsRouteImport } from './routes/settings/integrations'
@@ -106,6 +107,11 @@ const SettingsProviderRoute = SettingsProviderRouteImport.update({
 const SettingsPluginsRoute = SettingsPluginsRouteImport.update({
   id: '/plugins',
   path: '/plugins',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsPetRoute = SettingsPetRouteImport.update({
+  id: '/pet',
+  path: '/pet',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsModelRoute = SettingsModelRouteImport.update({
@@ -287,6 +293,7 @@ export interface FileRoutesByFullPath {
   '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/mcp': typeof SettingsMcpRouteWithChildren
   '/settings/model': typeof SettingsModelRoute
+  '/settings/pet': typeof SettingsPetRoute
   '/settings/plugins': typeof SettingsPluginsRoute
   '/settings/provider': typeof SettingsProviderRoute
   '/settings/quick-assistant': typeof SettingsQuickAssistantRoute
@@ -329,6 +336,7 @@ export interface FileRoutesByTo {
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/model': typeof SettingsModelRoute
+  '/settings/pet': typeof SettingsPetRoute
   '/settings/plugins': typeof SettingsPluginsRoute
   '/settings/provider': typeof SettingsProviderRoute
   '/settings/quick-assistant': typeof SettingsQuickAssistantRoute
@@ -374,6 +382,7 @@ export interface FileRoutesById {
   '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/mcp': typeof SettingsMcpRouteWithChildren
   '/settings/model': typeof SettingsModelRoute
+  '/settings/pet': typeof SettingsPetRoute
   '/settings/plugins': typeof SettingsPluginsRoute
   '/settings/provider': typeof SettingsProviderRoute
   '/settings/quick-assistant': typeof SettingsQuickAssistantRoute
@@ -420,6 +429,7 @@ export interface FileRouteTypes {
     | '/settings/integrations'
     | '/settings/mcp'
     | '/settings/model'
+    | '/settings/pet'
     | '/settings/plugins'
     | '/settings/provider'
     | '/settings/quick-assistant'
@@ -462,6 +472,7 @@ export interface FileRouteTypes {
     | '/settings/general'
     | '/settings/integrations'
     | '/settings/model'
+    | '/settings/pet'
     | '/settings/plugins'
     | '/settings/provider'
     | '/settings/quick-assistant'
@@ -506,6 +517,7 @@ export interface FileRouteTypes {
     | '/settings/integrations'
     | '/settings/mcp'
     | '/settings/model'
+    | '/settings/pet'
     | '/settings/plugins'
     | '/settings/provider'
     | '/settings/quick-assistant'
@@ -611,6 +623,13 @@ declare module '@tanstack/react-router' {
       path: '/plugins'
       fullPath: '/settings/plugins'
       preLoaderRoute: typeof SettingsPluginsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/pet': {
+      id: '/settings/pet'
+      path: '/pet'
+      fullPath: '/settings/pet'
+      preLoaderRoute: typeof SettingsPetRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/model': {
@@ -904,6 +923,7 @@ interface SettingsRouteChildren {
   SettingsIntegrationsRoute: typeof SettingsIntegrationsRoute
   SettingsMcpRoute: typeof SettingsMcpRouteWithChildren
   SettingsModelRoute: typeof SettingsModelRoute
+  SettingsPetRoute: typeof SettingsPetRoute
   SettingsPluginsRoute: typeof SettingsPluginsRoute
   SettingsProviderRoute: typeof SettingsProviderRoute
   SettingsQuickAssistantRoute: typeof SettingsQuickAssistantRoute
@@ -926,6 +946,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsIntegrationsRoute: SettingsIntegrationsRoute,
   SettingsMcpRoute: SettingsMcpRouteWithChildren,
   SettingsModelRoute: SettingsModelRoute,
+  SettingsPetRoute: SettingsPetRoute,
   SettingsPluginsRoute: SettingsPluginsRoute,
   SettingsProviderRoute: SettingsProviderRoute,
   SettingsQuickAssistantRoute: SettingsQuickAssistantRoute,

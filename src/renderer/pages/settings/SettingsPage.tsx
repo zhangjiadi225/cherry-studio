@@ -16,6 +16,7 @@ import {
   Info,
   Package,
   PackageCheck,
+  PawPrint,
   PictureInPicture2,
   Radio,
   Search,
@@ -177,6 +178,14 @@ const SettingsPage: FC = () => {
                 label={t('settings.quickAssistant.title')}
                 active={isActive('/settings/quick-assistant')}
                 onClick={() => go('/settings/quick-assistant')}
+              />
+              <MenuItem
+                className={settingsSubmenuItemClassName}
+                labelClassName={settingsSubmenuItemLabelClassName}
+                icon={<PawPrint />}
+                label={t('settings.pet.title')}
+                active={isActive('/settings/pet')}
+                onClick={() => go('/settings/pet')}
               />
               <MenuItem
                 className={settingsSubmenuItemClassName}
