@@ -235,6 +235,7 @@ describe('PetSettings', () => {
     expect(await screen.findByText('settings.pet.vrm.models')).toBeInTheDocument()
     expect(await screen.findByText('settings.pet.vrm.position_x')).toBeInTheDocument()
     expect(screen.getByText('settings.pet.vrm.position_y')).toBeInTheDocument()
+    expect(screen.getByText('settings.pet.vrm.position_z')).toBeInTheDocument()
     expect(screen.getByText('settings.pet.vrm.animation_preset')).toBeInTheDocument()
     expect(screen.getByText('settings.pet.vrm.scene_settings')).toBeInTheDocument()
     expect(screen.getByText('settings.pet.vrm.expression')).toBeInTheDocument()
@@ -296,14 +297,25 @@ describe('PetSettings', () => {
 
     render(<PetSettings />)
 
-    const positionXControl = await screen.findByRole('group', { name: 'settings.pet.vrm.position_x' })
+    const positionXInput = await screen.findByLabelText('settings.pet.vrm.position_x')
+    const positionZInput = await screen.findByLabelText('settings.pet.vrm.position_z')
 
-    fireEvent.click(within(positionXControl).getByRole('button', { name: 'slider-commit-max' }))
+    fireEvent.change(positionXInput, { target: { value: '1.25' } })
 
     await waitFor(() => {
       expect(MockUsePreferenceUtils.getPreferenceValue('feature.pet.vrm.model_profiles')).toMatchObject({
         'model-a': {
-          positionX: 2
+          positionX: 1.25
+        }
+      })
+    })
+
+    fireEvent.change(positionZInput, { target: { value: '-0.4' } })
+
+    await waitFor(() => {
+      expect(MockUsePreferenceUtils.getPreferenceValue('feature.pet.vrm.model_profiles')).toMatchObject({
+        'model-a': {
+          positionZ: -0.4
         }
       })
     })
@@ -334,15 +346,15 @@ describe('PetSettings', () => {
 
     render(<PetSettings />)
 
-    const positionXControl = await screen.findByRole('group', { name: 'settings.pet.vrm.position_x' })
+    const positionXInput = await screen.findByLabelText('settings.pet.vrm.position_x')
 
-    fireEvent.click(within(positionXControl).getByRole('button', { name: 'slider-commit-max' }))
+    fireEvent.change(positionXInput, { target: { value: '1.25' } })
 
     await waitFor(() => {
       expect(MockUsePreferenceUtils.getPreferenceValue('feature.pet.vrm.model_profiles')).toMatchObject({
         'model-a': {
           enabled: false,
-          positionX: 2
+          positionX: 1.25
         }
       })
     })

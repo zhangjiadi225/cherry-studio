@@ -51,6 +51,10 @@ export function createPetVrmStageModelProfile(
     order: Number.isFinite(input.order) ? Number(input.order) : (previous?.order ?? 0),
     positionX: normalizeCoordinate(input.positionX ?? previous?.positionX, 0),
     positionY: normalizeCoordinate(input.positionY ?? previous?.positionY, 0),
+    positionZ: normalizeCoordinate(
+      input.positionZ ?? previous?.positionZ,
+      getDefaultVrmStageModelPositionZ(input.order ?? previous?.order ?? 0)
+    ),
     updatedAt: Number.isFinite(input.updatedAt) ? Number(input.updatedAt) : now
   }
 }
@@ -273,6 +277,11 @@ function normalizeClampedNumber(value: unknown, min: number, max: number, fallba
 function normalizeCoordinate(value: unknown, fallback: number): number {
   const finiteValue = Number.isFinite(value) ? Number(value) : fallback
   return Math.min(Math.max(finiteValue, -2), 2)
+}
+
+function getDefaultVrmStageModelPositionZ(order: unknown): number {
+  const finiteOrder = Number.isFinite(order) ? Math.max(0, Number(order)) : 0
+  return Number((-finiteOrder * 0.02).toFixed(2))
 }
 
 function normalizeAnimationPreset(value: unknown): PetVrmStageModelProfile['animationPreset'] {

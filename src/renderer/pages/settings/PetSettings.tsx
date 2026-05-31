@@ -1,5 +1,6 @@
 import {
   Button,
+  Input,
   RowFlex,
   SegmentedControl,
   Select,
@@ -34,6 +35,7 @@ import type {
   PetPackageInfo,
   PetPastureBounds,
   PetPastureSnapshot,
+  PetPersonality,
   PetSceneMode,
   PetVrmStageAnimationPreset,
   PetVrmStageExpressionName,
@@ -75,6 +77,35 @@ const PET_VRM_STAGE_POSITION_MIN = -2
 const PET_VRM_STAGE_POSITION_MAX = 2
 const PET_VRM_STAGE_POSITION_STEP = 0.05
 const PET_VRM_STAGE_LIGHT_PERCENT_MAX = 600
+const PET_SCENE_MODE_LABEL_KEYS: Record<PetSceneMode, string> = {
+  'sprite-pasture': 'settings.pet.scene.modes.sprite-pasture',
+  'vrm-stage': 'settings.pet.scene.modes.vrm-stage'
+}
+const PET_VRM_STAGE_ANIMATION_PRESET_LABEL_KEYS: Record<PetVrmStageAnimationPreset, string> = {
+  'vroid-greeting': 'settings.pet.vrm.animation_presets.vroid-greeting',
+  'vroid-model-pose': 'settings.pet.vrm.animation_presets.vroid-model-pose',
+  'vroid-peace-sign': 'settings.pet.vrm.animation_presets.vroid-peace-sign',
+  'vroid-shoot': 'settings.pet.vrm.animation_presets.vroid-shoot',
+  'vroid-show-full-body': 'settings.pet.vrm.animation_presets.vroid-show-full-body',
+  'vroid-spin': 'settings.pet.vrm.animation_presets.vroid-spin',
+  'vroid-squat': 'settings.pet.vrm.animation_presets.vroid-squat'
+}
+const PET_VRM_STAGE_EXPRESSION_LABEL_KEYS: Record<PetVrmStageExpressionName, string> = {
+  angry: 'settings.pet.vrm.expressions.angry',
+  happy: 'settings.pet.vrm.expressions.happy',
+  neutral: 'settings.pet.vrm.expressions.neutral',
+  relaxed: 'settings.pet.vrm.expressions.relaxed',
+  sad: 'settings.pet.vrm.expressions.sad',
+  surprised: 'settings.pet.vrm.expressions.surprised'
+}
+const PET_PERSONALITY_LABEL_KEYS: Record<PetPersonality, string> = {
+  companion: 'settings.pet.personality.companion',
+  greeter: 'settings.pet.personality.greeter',
+  napster: 'settings.pet.personality.napster',
+  performer: 'settings.pet.personality.performer',
+  scout: 'settings.pet.personality.scout',
+  watcher: 'settings.pet.personality.watcher'
+}
 
 const PetSettings: FC = () => {
   const { t } = useTranslation()
@@ -248,7 +279,8 @@ const PetSettings: FC = () => {
         modelId: model.id,
         order,
         positionX: currentProfile?.positionX ?? getDefaultVrmStageModelPositionX(order),
-        positionY: currentProfile?.positionY ?? 0
+        positionY: currentProfile?.positionY ?? 0,
+        positionZ: currentProfile?.positionZ ?? getDefaultVrmStageModelPositionZ(order)
       },
       currentProfile
     )
@@ -264,6 +296,7 @@ const PetSettings: FC = () => {
         order,
         positionX: currentProfile?.positionX ?? getDefaultVrmStageModelPositionX(order),
         positionY: currentProfile?.positionY ?? 0,
+        positionZ: currentProfile?.positionZ ?? getDefaultVrmStageModelPositionZ(order),
         ...patch
       },
       currentProfile
@@ -354,7 +387,7 @@ const PetSettings: FC = () => {
             onValueChange={handleSceneModeChange}
             options={PET_SCENE_MODE_OPTIONS.map((mode) => ({
               value: mode,
-              label: t(`settings.pet.scene.modes.${mode}`)
+              label: t(PET_SCENE_MODE_LABEL_KEYS[mode])
             }))}
             size="sm"
           />
@@ -401,27 +434,35 @@ const PetSettings: FC = () => {
                             </Button>
                           </RowFlex>
                         </div>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <VrmModelSliderField
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <VrmModelCoordinateField
                             label={t('settings.pet.vrm.position_x')}
-                            valueLabel={formatCoordinate(effectiveProfile.positionX)}
                             value={effectiveProfile.positionX}
                             min={PET_VRM_STAGE_POSITION_MIN}
                             max={PET_VRM_STAGE_POSITION_MAX}
                             step={PET_VRM_STAGE_POSITION_STEP}
-                            onCommit={(value) =>
+                            onChange={(value) =>
                               void handleVrmModelProfileChange(model, { positionX: clampVrmPosition(value) })
                             }
                           />
-                          <VrmModelSliderField
+                          <VrmModelCoordinateField
                             label={t('settings.pet.vrm.position_y')}
-                            valueLabel={formatCoordinate(effectiveProfile.positionY)}
                             value={effectiveProfile.positionY}
                             min={PET_VRM_STAGE_POSITION_MIN}
                             max={PET_VRM_STAGE_POSITION_MAX}
                             step={PET_VRM_STAGE_POSITION_STEP}
-                            onCommit={(value) =>
+                            onChange={(value) =>
                               void handleVrmModelProfileChange(model, { positionY: clampVrmPosition(value) })
+                            }
+                          />
+                          <VrmModelCoordinateField
+                            label={t('settings.pet.vrm.position_z')}
+                            value={effectiveProfile.positionZ}
+                            min={PET_VRM_STAGE_POSITION_MIN}
+                            max={PET_VRM_STAGE_POSITION_MAX}
+                            step={PET_VRM_STAGE_POSITION_STEP}
+                            onChange={(value) =>
+                              void handleVrmModelProfileChange(model, { positionZ: clampVrmPosition(value) })
                             }
                           />
                         </div>
@@ -439,7 +480,7 @@ const PetSettings: FC = () => {
                               <SelectContent>
                                 {PET_VRM_STAGE_ANIMATION_PRESETS.map((preset) => (
                                   <SelectItem key={preset} value={preset}>
-                                    {t(`settings.pet.vrm.animation_presets.${preset}`)}
+                                    {t(PET_VRM_STAGE_ANIMATION_PRESET_LABEL_KEYS[preset])}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -458,7 +499,7 @@ const PetSettings: FC = () => {
                               <SelectContent>
                                 {PET_VRM_STAGE_EXPRESSION_NAMES.map((expression) => (
                                   <SelectItem key={expression} value={expression}>
-                                    {t(`settings.pet.vrm.expressions.${expression}`)}
+                                    {t(PET_VRM_STAGE_EXPRESSION_LABEL_KEYS[expression])}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -471,20 +512,11 @@ const PetSettings: FC = () => {
                             min={0}
                             max={100}
                             step={5}
-                            onCommit={(value) =>
+                            onChange={(value) =>
                               void handleVrmModelProfileChange(model, {
                                 expressionIntensity: clampPercent(value) / 100
                               })
                             }
-                          />
-                          <VrmModelSliderField
-                            label={t('settings.pet.vrm.layer_order')}
-                            valueLabel={String(effectiveProfile.order)}
-                            value={effectiveProfile.order}
-                            min={0}
-                            max={Math.max(4, vrmModels.length - 1)}
-                            step={1}
-                            onCommit={(value) => void handleVrmModelProfileChange(model, { order: Math.round(value) })}
                           />
                         </div>
                         <div className="grid gap-2 sm:grid-cols-3">
@@ -532,6 +564,9 @@ const PetSettings: FC = () => {
                   min={0}
                   max={PET_VRM_STAGE_LIGHT_PERCENT_MAX}
                   step={10}
+                  onValueChange={([value = PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS.keyLightIntensity * 100]) =>
+                    void handleVrmSceneSettingsChange({ keyLightIntensity: clampLightPercent(value) / 100 })
+                  }
                   onValueCommit={([value = PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS.keyLightIntensity * 100]) =>
                     void handleVrmSceneSettingsChange({ keyLightIntensity: clampLightPercent(value) / 100 })
                   }
@@ -549,6 +584,9 @@ const PetSettings: FC = () => {
                   min={0}
                   max={PET_VRM_STAGE_LIGHT_PERCENT_MAX}
                   step={10}
+                  onValueChange={([value = PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS.fillLightIntensity * 100]) =>
+                    void handleVrmSceneSettingsChange({ fillLightIntensity: clampLightPercent(value) / 100 })
+                  }
                   onValueCommit={([value = PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS.fillLightIntensity * 100]) =>
                     void handleVrmSceneSettingsChange({ fillLightIntensity: clampLightPercent(value) / 100 })
                   }
@@ -566,6 +604,9 @@ const PetSettings: FC = () => {
                   min={0}
                   max={PET_VRM_STAGE_LIGHT_PERCENT_MAX}
                   step={10}
+                  onValueChange={([value = PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS.ambientLightIntensity * 100]) =>
+                    void handleVrmSceneSettingsChange({ ambientLightIntensity: clampLightPercent(value) / 100 })
+                  }
                   onValueCommit={([value = PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS.ambientLightIntensity * 100]) =>
                     void handleVrmSceneSettingsChange({ ambientLightIntensity: clampLightPercent(value) / 100 })
                   }
@@ -661,7 +702,7 @@ const PetSettings: FC = () => {
                         <SelectContent>
                           {PET_PERSONALITIES.map((personality) => (
                             <SelectItem key={personality} value={personality}>
-                              {t(`settings.pet.personality.${personality}`)}
+                              {t(PET_PERSONALITY_LABEL_KEYS[personality])}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -735,11 +776,11 @@ const VrmModelSliderField: FC<{
   label: string
   max: number
   min: number
-  onCommit: (value: number) => void
+  onChange: (value: number) => void
   step: number
   value: number
   valueLabel: string
-}> = ({ label, max, min, onCommit, step, value, valueLabel }) => (
+}> = ({ label, max, min, onChange, step, value, valueLabel }) => (
   <div className="grid gap-2" role="group" aria-label={label}>
     <div className="flex items-center justify-between gap-3">
       <span className="font-medium text-foreground-muted text-xs">{label}</span>
@@ -750,11 +791,38 @@ const VrmModelSliderField: FC<{
       min={min}
       max={max}
       step={step}
-      onValueCommit={([nextValue = value]) => onCommit(nextValue)}
+      onValueChange={([nextValue = value]) => onChange(nextValue)}
+      onValueCommit={([nextValue = value]) => onChange(nextValue)}
       aria-label={label}
       className="w-full"
     />
   </div>
+)
+
+const VrmModelCoordinateField: FC<{
+  label: string
+  max: number
+  min: number
+  onChange: (value: number) => void
+  step: number
+  value: number
+}> = ({ label, max, min, onChange, step, value }) => (
+  <label className="grid min-w-0 gap-1">
+    <span className="font-medium text-foreground-muted text-xs">{label}</span>
+    <Input
+      aria-label={label}
+      className="h-8"
+      max={max}
+      min={min}
+      step={step}
+      type="number"
+      value={formatCoordinate(value)}
+      onChange={(event) => {
+        const nextValue = Number(event.currentTarget.value)
+        if (Number.isFinite(nextValue)) onChange(nextValue)
+      }}
+    />
+  </label>
 )
 
 const VrmModelSwitchField: FC<{ checked: boolean; label: string; onChange: (checked: boolean) => void }> = ({
@@ -812,7 +880,8 @@ function getEffectiveVrmModelProfile(
     modelId: model.id,
     order,
     positionX: getDefaultVrmStageModelPositionX(order),
-    positionY: 0
+    positionY: 0,
+    positionZ: getDefaultVrmStageModelPositionZ(order)
   })
 }
 
@@ -828,6 +897,10 @@ function getDefaultVrmStageModelPositionX(order: number): number {
   if (order <= 0) return 0
   const direction = order % 2 === 0 ? 1 : -1
   return direction * Math.min(1.2, 0.45 + Math.floor((order - 1) / 2) * 0.35)
+}
+
+function getDefaultVrmStageModelPositionZ(order: number): number {
+  return Number((-Math.max(0, order) * 0.02).toFixed(2))
 }
 
 function clampPastureWidth(width: number): number {

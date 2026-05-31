@@ -162,6 +162,7 @@ export function buildPetVrmStageModels(profiles: PetVrmStageModelProfileMap): Pe
       order: profile.order,
       positionX: profile.positionX,
       positionY: profile.positionY,
+      positionZ: profile.positionZ,
       profile
     }))
 }

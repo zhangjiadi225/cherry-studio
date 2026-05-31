@@ -25,6 +25,7 @@ export type PetVrmStageModel = {
   order: number
   positionX: number
   positionY: number
+  positionZ: number
   profile: PetVrmStageModelProfile
 }
 

@@ -46,24 +46,25 @@ describe('usePetPreferences', () => {
     expect(MockUsePreferenceUtils.getPreferenceValue('feature.pet.vrm.model_profiles')).toMatchObject({
       'model-a': {
         enabled: true,
-        modelId: 'model-a'
+        modelId: 'model-a',
+        positionZ: 0
       }
     })
   })
 
   it('normalizes VRM stage scene settings from Preference', () => {
     MockUsePreferenceUtils.setPreferenceValue('feature.pet.vrm.scene_settings', {
-      backgroundColor: '#abcdef',
-      backgroundMode: 'gradient',
-      cameraZoom: 2
+      ambientLightIntensity: 999,
+      fillLightIntensity: 8,
+      keyLightIntensity: 3.4
     })
 
     const { result } = renderHook(() => usePetVrmStageSceneSettingsPreference())
 
-    expect(result.current[0]).toMatchObject({
-      backgroundColor: '#abcdef',
-      backgroundMode: 'gradient',
-      cameraZoom: 1.6
+    expect(result.current[0]).toEqual({
+      ambientLightIntensity: 6,
+      fillLightIntensity: 6,
+      keyLightIntensity: 3.4
     })
   })
 })

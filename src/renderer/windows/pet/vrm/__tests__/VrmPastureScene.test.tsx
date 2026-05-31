@@ -505,7 +505,7 @@ describe('VrmPastureScene', () => {
       width: 1
     } as never)
 
-    render(
+    const renderModel = (positionX: number, positionY: number, positionZ: number) => (
       <VrmPastureScene
         models={[
           {
@@ -513,16 +513,18 @@ describe('VrmPastureScene', () => {
             id: 'stage-model',
             modelId: 'model-a',
             order: 0,
-            positionX: -0.35,
-            positionY: 0.25,
+            positionX,
+            positionY,
+            positionZ,
             profile: {
               animationPreset: 'vroid-greeting',
               createdAt: 1,
               enabled: true,
               modelId: 'model-a',
               order: 0,
-              positionX: -0.35,
-              positionY: 0.25,
+              positionX,
+              positionY,
+              positionZ,
               updatedAt: 1
             }
           }
@@ -531,6 +533,7 @@ describe('VrmPastureScene', () => {
         stageWidth={420}
       />
     )
+    const { rerender } = render(renderModel(-0.35, 0.25, -0.1))
 
     await act(async () => {
       await Promise.resolve()
@@ -552,8 +555,20 @@ describe('VrmPastureScene', () => {
 
     expect(root.position.x).toBeCloseTo(-0.35)
     expect(root.position.y).toBeCloseTo(0.25)
-    expect(root.position.z).toBeCloseTo(0)
+    expect(root.position.z).toBeCloseTo(-0.1)
     expect(mixer?.update).toHaveBeenCalledWith(0.016)
     expect(vrm.update).toHaveBeenCalledWith(0.016)
+
+    rerender(renderModel(0.5, -0.2, 0.15))
+
+    act(() => {
+      vi.mocked(window.requestAnimationFrame).mock.calls.at(-1)?.[0](32)
+    })
+
+    expect(createPetVrmModelObjectUrl).toHaveBeenCalledTimes(1)
+    expect(loadPetVrmModel).toHaveBeenCalledTimes(1)
+    expect(root.position.x).toBeCloseTo(0.5)
+    expect(root.position.y).toBeCloseTo(-0.2)
+    expect(root.position.z).toBeCloseTo(0.15)
   })
 })

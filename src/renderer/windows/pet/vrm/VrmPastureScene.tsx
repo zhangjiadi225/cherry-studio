@@ -95,6 +95,7 @@ type VrmModelRuntime = {
   order: number
   positionX: number
   positionY: number
+  positionZ: number
 }
 
 export type VrmStageSceneBootstrap = {
@@ -394,7 +395,8 @@ function createVrmModelRuntime(model: PetVrmStageModel): VrmModelRuntime {
     modelId: '',
     order: 0,
     positionX: model.positionX,
-    positionY: model.positionY
+    positionY: model.positionY,
+    positionZ: model.positionZ
   }
 }
 
@@ -533,8 +535,9 @@ function updateVrmModelTransform(
 
   modelRuntime.positionX = model.positionX
   modelRuntime.positionY = model.positionY
+  modelRuntime.positionZ = model.positionZ
   loaded.root.scale.setScalar(1)
-  loaded.root.position.set(model.positionX, model.positionY, getVrmDepthForOrder(model.order))
+  loaded.root.position.set(model.positionX, model.positionY, model.positionZ)
   modelRuntime.animationMixer?.update(delta)
   applyVrmModelPose(modelRuntime, loaded, model, gazeTarget, lookAtKey, delta)
 }
@@ -674,10 +677,6 @@ function disposeVrmModelRuntime(runtime: SceneRuntime, modelRuntime: VrmModelRun
   }
   modelRuntime.objectUrlRevoke?.()
   modelRuntime.objectUrlRevoke = undefined
-}
-
-function getVrmDepthForOrder(order: number): number {
-  return -Math.max(0, order) * 0.02
 }
 
 function applySceneSettings(runtime: SceneRuntime, settings: PetVrmStageSceneSettings): void {

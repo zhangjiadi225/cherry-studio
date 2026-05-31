@@ -56,7 +56,8 @@ describe('vrm stage model profiles', () => {
       modelId: 'model-a',
       order: 1,
       positionX: -0.45,
-      positionY: 0.2
+      positionY: 0.2,
+      positionZ: -0.1
     })
 
     const profiles = petVrmStageModelProfilesFromRecord({ 'model-a': profile })
@@ -66,7 +67,8 @@ describe('vrm stage model profiles', () => {
       modelId: 'model-a',
       order: 1,
       positionX: -0.45,
-      positionY: 0.2
+      positionY: 0.2,
+      positionZ: -0.1
     })
     expect(profiles.get('model-a')).not.toHaveProperty('agentId')
     expect(profiles.get('model-a')).not.toHaveProperty('personality')
@@ -116,7 +118,8 @@ describe('vrm stage model profiles', () => {
       lookAtCursor: true,
       modelId: 'model-a',
       positionX: 0,
-      positionY: 0
+      positionY: 0,
+      positionZ: 0
     })
   })
 
