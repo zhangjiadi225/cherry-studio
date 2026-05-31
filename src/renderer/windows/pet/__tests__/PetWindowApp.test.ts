@@ -67,6 +67,7 @@ function MockVrmPastureScene({
   hitTestPoint,
   models,
   onHitTestTransparencyChange,
+  presentationMotionStates,
   sceneSettings,
   stageHeight,
   stageWidth
@@ -74,6 +75,7 @@ function MockVrmPastureScene({
   hitTestPoint?: { x: number; y: number } | null
   models: Array<{ id: string; modelId: string }>
   onHitTestTransparencyChange?: (transparent: boolean) => void
+  presentationMotionStates?: ReadonlyMap<string, { phase: string }>
   sceneSettings?: { keyLightIntensity?: number }
   stageHeight: number
   stageWidth: number
@@ -87,6 +89,9 @@ function MockVrmPastureScene({
     'data-hit-test-point': hitTestPoint ? `${hitTestPoint.x},${hitTestPoint.y}` : '',
     'data-key-light': sceneSettings?.keyLightIntensity == null ? '' : String(sceneSettings.keyLightIntensity),
     'data-model-ids': models.map((model) => model.modelId).join(','),
+    'data-motion-phases': models
+      .map((model) => `${model.modelId}:${presentationMotionStates?.get(model.modelId)?.phase ?? 'idle'}`)
+      .join(','),
     'data-stage-height': String(stageHeight),
     'data-stage-width': String(stageWidth),
     'data-testid': 'pet-vrm-scene'
@@ -466,6 +471,7 @@ describe('PetWindowApp helpers', () => {
 
     expect(vrmScene).toHaveAttribute('data-model-ids', 'model-a')
     expect(vrmScene).toHaveAttribute('data-key-light', '2.8')
+    expect(vrmScene).toHaveAttribute('data-motion-phases', 'model-a:idle')
     expect(screen.queryByTestId('pet-pasture-background')).toBeNull()
     expect(screen.queryByTestId('pasture-animal-animal-a')).toBeNull()
     expect(screen.queryByLabelText('Show pet controls')).toBeNull()
@@ -479,6 +485,158 @@ describe('PetWindowApp helpers', () => {
     expect(screen.getByTestId('pet-resize-vrm-bottom-right')).toBeInTheDocument()
     expect(screen.getByTestId('pet-vrm-resize-frame')).toHaveAttribute('data-visible', 'false')
     expect(screen.getByTestId('pet-vrm-stage-layer')).toHaveStyle({ opacity: '1' })
+  })
+
+  it('shows VRM-target agent status and permission prompts without local approval actions', async () => {
+    const profile = createPetVrmStageModelProfile({
+      agentId: 'agent-a',
+      enabled: true,
+      modelId: 'model-a',
+      order: 0
+    })
+    preferenceMocks.petMode = 'vrm-stage'
+    preferenceMocks.vrmModelProfiles = {
+      [profile.modelId]: profile
+    }
+    vi.mocked(window.api.pet.getPastureSnapshot).mockResolvedValue({
+      animals: [createAnimal('animal-a', 0.5)],
+      bindings: [],
+      bubbles: [],
+      bounds: { x: -1, y: -1, width: 640 },
+      packages: [createPackage()],
+      permissionPrompts: [],
+      queuedTasks: [],
+      vrmModelProfiles: preferenceMocks.vrmModelProfiles,
+      vrmSceneSettings: preferenceMocks.vrmSceneSettings
+    })
+    vi.mocked(window.api.ai.agentPresentation.getReplay).mockResolvedValue([
+      createAgentEvent('stream.started', { agentId: 'agent-a', sessionId: 'vrm-session-a', timestamp: 1000 }),
+      createAgentEvent('message.delta', {
+        agentId: 'agent-a',
+        delta: 'Checking the VRM model stream.',
+        sessionId: 'vrm-session-a',
+        timestamp: 1100
+      }),
+      createAgentEvent('approval.required', {
+        agentId: 'agent-a',
+        approvalId: 'approval-vrm',
+        safePreview: '{ command: "inspect-vrm" }',
+        sessionId: 'vrm-session-a',
+        timestamp: 1200,
+        toolCallId: 'tool-call-vrm',
+        toolName: 'Bash'
+      })
+    ])
+    const openTask = vi.spyOn(window.api.pet, 'openTask').mockResolvedValue(undefined)
+    const respond = vi.spyOn(window.api.ai.toolApproval, 'respond').mockResolvedValue({ ok: true })
+
+    render(createElement(PetWindowApp))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('pet-vrm-presentation-layer')).toBeInTheDocument()
+    })
+
+    expect(screen.getByTestId('pet-vrm-scene')).toHaveAttribute('data-motion-phases', 'model-a:waiting-permission')
+    expect(screen.getByTestId('pet-vrm-presentation-model-a')).toHaveAttribute('data-status', 'pending')
+    expect(screen.getByText('Permission pending')).toBeInTheDocument()
+    expect(screen.getByText('Cherry needs permission')).toBeInTheDocument()
+    expect(screen.getByText('{ command: "inspect-vrm" }')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Allow once' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Deny' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open in Cherry' }))
+
+    await waitFor(() => {
+      expect(openTask).toHaveBeenCalledWith('session:vrm-session-a')
+    })
+    expect(respond).not.toHaveBeenCalled()
+  })
+
+  it('passes speaking runtime motion to the VRM scene for a streaming bound agent', async () => {
+    const profile = createPetVrmStageModelProfile({
+      agentId: 'agent-a',
+      enabled: true,
+      modelId: 'model-a',
+      order: 0
+    })
+    preferenceMocks.petMode = 'vrm-stage'
+    preferenceMocks.vrmModelProfiles = {
+      [profile.modelId]: profile
+    }
+    vi.mocked(window.api.pet.getPastureSnapshot).mockResolvedValue({
+      animals: [createAnimal('animal-a', 0.5)],
+      bindings: [],
+      bubbles: [],
+      bounds: { x: -1, y: -1, width: 640 },
+      packages: [createPackage()],
+      permissionPrompts: [],
+      queuedTasks: [],
+      vrmModelProfiles: preferenceMocks.vrmModelProfiles,
+      vrmSceneSettings: preferenceMocks.vrmSceneSettings
+    })
+    vi.mocked(window.api.ai.agentPresentation.getReplay).mockResolvedValue([
+      createAgentEvent('stream.started', { agentId: 'agent-a', sessionId: 'vrm-session-a', timestamp: 1000 }),
+      createAgentEvent('message.delta', {
+        agentId: 'agent-a',
+        delta: 'The VRM model is speaking now.',
+        sessionId: 'vrm-session-a',
+        timestamp: 1100
+      })
+    ])
+
+    render(createElement(PetWindowApp))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('pet-vrm-scene')).toHaveAttribute('data-motion-phases', 'model-a:speaking')
+    })
+  })
+
+  it('keeps VRM-target tasks out of the sprite pasture bubbles and control island', async () => {
+    const profile = createPetVrmStageModelProfile({
+      agentId: 'agent-a',
+      enabled: true,
+      modelId: 'model-a',
+      order: 0
+    })
+    preferenceMocks.petMode = 'sprite-pasture'
+    preferenceMocks.vrmModelProfiles = {
+      [profile.modelId]: profile
+    }
+    vi.mocked(window.api.pet.getPastureSnapshot).mockResolvedValue({
+      animals: [createAnimal('animal-a', 0.5)],
+      bindings: [],
+      bubbles: [],
+      bounds: { x: -1, y: -1, width: 640 },
+      packages: [createPackage()],
+      permissionPrompts: [],
+      queuedTasks: [],
+      vrmModelProfiles: preferenceMocks.vrmModelProfiles,
+      vrmSceneSettings: preferenceMocks.vrmSceneSettings
+    })
+    vi.mocked(window.api.ai.agentPresentation.getReplay).mockResolvedValue([
+      createAgentEvent('stream.started', { agentId: 'agent-a', sessionId: 'vrm-session-a', timestamp: 1000 }),
+      createAgentEvent('approval.required', {
+        agentId: 'agent-a',
+        approvalId: 'approval-vrm',
+        safePreview: 'VRM-only preview',
+        sessionId: 'vrm-session-a',
+        timestamp: 1100,
+        toolCallId: 'tool-call-vrm',
+        toolName: 'Bash'
+      }),
+      createAgentEvent('stream.started', { agentId: 'agent-b', sessionId: 'animal-session-b', timestamp: 1200 })
+    ])
+
+    render(createElement(PetWindowApp))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('pet-thought-bubble-session-animal-session-b')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByTestId('pet-thought-bubble-session-vrm-session-a')).toBeNull()
+    fireEvent.mouseEnter(screen.getByTestId('pet-control-island'))
+    expect(screen.queryByText('VRM-only preview')).toBeNull()
+    expect(screen.queryByText('Cherry needs permission')).toBeNull()
   })
 
   it('shows the VRM resize frame after hovering near a window edge', async () => {
@@ -1566,7 +1724,7 @@ function createAgentEvent<TType extends AgentPresentationEvent['type']>(
     toolName: 'Bash',
     type,
     ...overrides
-  } as Extract<AgentPresentationEvent, { type: TType }>
+  } as unknown as Extract<AgentPresentationEvent, { type: TType }>
 }
 
 function createAnimal(id: string, homeXRatio: number, enabled = true): PetAnimalInstance {

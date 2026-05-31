@@ -233,6 +233,38 @@ describe('petPresentationRuntime', () => {
     ])
   })
 
+  it('does not assign generic agent presentation events to unbound VRM model profiles', () => {
+    const profile = createPetVrmStageModelProfile({
+      enabled: true,
+      modelId: 'model-a'
+    })
+    let state = updatePetPresentationRuntimeState(
+      createPetPresentationRuntimeState(),
+      createSnapshot({
+        animals: [createAnimal({ agentId: null, id: 'animal-a' })],
+        vrmModelProfiles: {
+          [profile.modelId]: profile
+        }
+      })
+    )
+
+    state = updatePetPresentationRuntimeStateFromAgentEvent(
+      state,
+      createAgentEvent('stream.started', { agentId: 'agent-unbound' })
+    )
+
+    expect(state.snapshot.bindings).toMatchObject([
+      {
+        animalId: 'animal-a',
+        petTargetId: 'animal-a',
+        petTargetKind: 'animal',
+        sourceId: 'agent-unbound',
+        status: 'running'
+      }
+    ])
+    expect(state.snapshot.bindings.some((binding) => binding.petTargetId === 'model-a')).toBe(false)
+  })
+
   it('applies renderer-local task presentation actions without main-side state', () => {
     const running = createBinding({ status: 'running' })
     const prompt = createPermissionPrompt()

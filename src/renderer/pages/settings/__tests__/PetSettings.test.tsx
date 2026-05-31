@@ -62,11 +62,14 @@ vi.mock('@cherrystudio/ui', async (importOriginal) => ({
     children,
     loading: _loading,
     ...props
-  }: React.ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean }) => (
-    <button type="button" {...props}>
-      {children}
-    </button>
-  ),
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean }) => {
+    void _loading
+    return (
+      <button type="button" {...props}>
+        {children}
+      </button>
+    )
+  },
   RowFlex: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
   SegmentedControl: <T extends string>({
     onValueChange,
@@ -263,7 +266,7 @@ describe('PetSettings', () => {
     expect(await screen.findByText('settings.pet.vrm.position_x')).toBeInTheDocument()
     expect(screen.getByText('settings.pet.vrm.position_y')).toBeInTheDocument()
     expect(screen.getByText('settings.pet.vrm.position_z')).toBeInTheDocument()
-    expect(screen.getByText('settings.pet.vrm.animation_preset')).toBeInTheDocument()
+    expect(screen.getByText('settings.pet.vrm.default_idle_animation')).toBeInTheDocument()
     expect(screen.getByText('settings.pet.vrm.scene_settings')).toBeInTheDocument()
     expect(screen.getByText('settings.pet.vrm.expression')).toBeInTheDocument()
     expect(screen.getByText('settings.pet.vrm.look_at_cursor')).toBeInTheDocument()
@@ -429,11 +432,10 @@ function createSnapshot(overrides: Partial<PetPastureSnapshot> = {}): PetPasture
         description: 'Package A',
         displayName: 'Package A',
         id: 'package-a',
-        manifestVersion: 1,
-        name: 'package-a',
-        packagePath: 'D:/pets/package-a',
+        imported: true,
+        spritesheetPath: 'spritesheet.png',
         spriteUrl: 'file:///D:/pets/package-a/sprite.png',
-        version: '1.0.0'
+        schemaVersion: 1
       }
     ],
     permissionPrompts: [],

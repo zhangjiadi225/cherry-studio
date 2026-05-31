@@ -528,7 +528,7 @@ const PetSettings: FC = () => {
                               </SelectContent>
                             </Select>
                           </PetPackageSelectField>
-                          <PetPackageSelectField label={t('settings.pet.vrm.animation_preset')}>
+                          <PetPackageSelectField label={t('settings.pet.vrm.default_idle_animation')}>
                             <Select
                               value={effectiveProfile.animationPreset ?? 'vroid-show-full-body'}
                               onValueChange={(value) =>
@@ -972,6 +972,11 @@ function clampPastureWidth(width: number): number {
 function clampPetScalePercent(percent: number): number {
   const finitePercent = Number.isFinite(percent) ? percent : Math.round(PET_DEFAULT_SCALE * 100)
   return Math.round(clampPetScale(finitePercent / 100) * 100)
+}
+
+function clampPercent(percent: number): number {
+  const finitePercent = Number.isFinite(percent) ? percent : 100
+  return Math.round(Math.min(Math.max(finitePercent, 0), 100))
 }
 
 function clampLightPercent(percent: number): number {

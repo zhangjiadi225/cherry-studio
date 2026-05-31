@@ -6879,8 +6879,9 @@
           "sad": "Sad",
           "surprised": "Surprised"
         },
+        "default_idle_animation": "Default idle animation",
         "fill_light": "Fill light",
-        "idle_motion": "Idle bones",
+        "idle_motion": "Play idle motion",
         "import": "Import VRM",
         "import_failed": "Failed to import VRM model: {{reason}}",
         "import_preset": "Import",

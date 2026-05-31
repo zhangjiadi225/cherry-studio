@@ -2,6 +2,7 @@ import { PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS } from '@shared/pet'
 import { act, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type * as VrmAnimationModule from '../vrmAnimation'
 import { disposePetVrmModel, loadPetVrmModel } from '../vrmLoader'
 import { createPetVrmModelObjectUrl } from '../vrmModelLibrary'
 import VrmPastureScene, { isRenderTargetRegionTransparent, type RenderTargetRegionRead } from '../VrmPastureScene'
@@ -360,7 +361,7 @@ vi.mock('../assets/vroid-official/squat.vrma?url', () => ({
 }))
 
 vi.mock('../vrmAnimation', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../vrmAnimation')>()
+  const actual = await importOriginal<typeof VrmAnimationModule>()
   return {
     ...actual,
     createPetVrmAnimationClip: vi.fn(() => threeMocks.defaultVrmClip),
@@ -607,6 +608,150 @@ describe('VrmPastureScene', () => {
     expect(root.position.x).toBeCloseTo(0.5)
     expect(root.position.y).toBeCloseTo(-0.2)
     expect(root.position.z).toBeCloseTo(0.15)
+  })
+
+  it('applies transient presentation motion without mutating the default profile motion', async () => {
+    const { Object3D } = await import('three')
+    const root = new Object3D()
+    const scene = new Object3D()
+    const vrm = {
+      expressionManager: {
+        setValue: vi.fn()
+      },
+      humanoid: {
+        getNormalizedBoneNode: vi.fn(() => null)
+      },
+      lookAt: {
+        reset: vi.fn(),
+        target: undefined,
+        update: vi.fn()
+      },
+      scene,
+      update: vi.fn()
+    }
+    vi.mocked(createPetVrmModelObjectUrl).mockResolvedValue({
+      record: {
+        id: 'model-a',
+        importedAt: 1,
+        lastModified: 1,
+        name: 'Model A',
+        size: 1,
+        sourceUrl: 'blob:model',
+        type: 'model/vrm',
+        updatedAt: 1
+      },
+      revoke: vi.fn(),
+      url: 'blob:model'
+    })
+    vi.mocked(loadPetVrmModel).mockResolvedValue({
+      height: 1,
+      root,
+      vrm,
+      width: 1
+    } as never)
+
+    const profile = {
+      animationPreset: 'vroid-greeting' as const,
+      createdAt: 1,
+      enabled: true,
+      expression: 'sad' as const,
+      expressionIntensity: 0.2,
+      idleMotion: false,
+      modelId: 'model-a',
+      order: 0,
+      positionX: 0,
+      positionY: 0,
+      positionZ: 0,
+      updatedAt: 1
+    }
+    const renderModel = (
+      presentationMotionStates?: Parameters<typeof VrmPastureScene>[0]['presentationMotionStates']
+    ) => (
+      <VrmPastureScene
+        models={[
+          {
+            enabled: true,
+            id: 'stage-model',
+            modelId: 'model-a',
+            order: 0,
+            positionX: 0,
+            positionY: 0,
+            positionZ: 0,
+            profile
+          }
+        ]}
+        presentationMotionStates={presentationMotionStates}
+        stageHeight={640}
+        stageWidth={420}
+      />
+    )
+
+    const { rerender } = render(
+      renderModel(
+        new Map([
+          [
+            'model-a',
+            {
+              animationTimeScale: 1.15,
+              expression: 'happy',
+              expressionIntensity: 0.38,
+              modelId: 'model-a',
+              phase: 'speaking',
+              startedAt: 1000,
+              taskKey: 'session:session-a',
+              updatedAt: 1100
+            }
+          ]
+        ])
+      )
+    )
+
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    act(() => {
+      vi.mocked(window.requestAnimationFrame).mock.calls.at(-1)?.[0](16)
+    })
+
+    const mixer = threeMocks.animationMixers.at(-1)
+    expect(mixer?.timeScale).toBe(1.15)
+    expect(vrm.expressionManager.setValue).toHaveBeenCalledWith('happy', 0.38)
+    expect(vrm.expressionManager.setValue).not.toHaveBeenCalledWith('sad', 0.2)
+    expect(profile).toMatchObject({
+      expression: 'sad',
+      expressionIntensity: 0.2,
+      idleMotion: false
+    })
+
+    rerender(
+      renderModel(
+        new Map([
+          [
+            'model-a',
+            {
+              animationTimeScale: 1.05,
+              expiresAt: 1,
+              expression: 'happy',
+              expressionIntensity: 0.7,
+              modelId: 'model-a',
+              phase: 'done-pulse',
+              startedAt: 1000,
+              taskKey: 'session:session-a',
+              updatedAt: 1000
+            }
+          ]
+        ])
+      )
+    )
+    act(() => {
+      vi.mocked(window.requestAnimationFrame).mock.calls.at(-1)?.[0](32)
+    })
+
+    expect(mixer?.timeScale).toBe(0)
+    expect(vrm.expressionManager.setValue).toHaveBeenCalledWith('sad', 0.2)
+    expect(vrm.expressionManager.setValue).not.toHaveBeenCalledWith('happy', 0.7)
   })
 
   it('keeps the first ready model camera bootstrap stable when its animation preset changes', async () => {

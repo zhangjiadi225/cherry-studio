@@ -225,6 +225,13 @@ const PetWindowApp: FC = () => {
     () => snapshot.queuedTasks.filter(isPetTaskBoundToSpriteAnimal),
     [snapshot.queuedTasks]
   )
+  const vrmBindings = useMemo(() => snapshot.bindings.filter(isPetTaskBoundToVrmModel), [snapshot.bindings])
+  const vrmBubbles = useMemo(() => snapshot.bubbles.filter(isPetTaskBoundToVrmModel), [snapshot.bubbles])
+  const vrmPermissionPrompts = useMemo(
+    () => snapshot.permissionPrompts.filter(isPetTaskBoundToVrmModel),
+    [snapshot.permissionPrompts]
+  )
+  const vrmQueuedTasks = useMemo(() => snapshot.queuedTasks.filter(isPetTaskBoundToVrmModel), [snapshot.queuedTasks])
   const bindingByAnimalId = useMemo(() => buildPetTaskBindingByAnimalId(spriteBindings), [spriteBindings])
   const boundedPetScale = clampPetScale(petScale)
   const petDimensions = useMemo(() => getPetDimensions(boundedPetScale), [boundedPetScale])
@@ -668,6 +675,8 @@ const PetWindowApp: FC = () => {
       ) : null}
       {vrmSceneEnabled ? (
         <VrmStageScene
+          bindings={vrmBindings}
+          bubbles={vrmBubbles}
           hitTestPoint={vrmHitTestPoint}
           lookAtPoint={vrmLookAtPoint}
           modelLoadStates={vrmModelLoadStates}
@@ -680,6 +689,8 @@ const PetWindowApp: FC = () => {
           onResizePointerMove={handleResizePointerMove}
           onResizePointerUp={finishWindowResize}
           onSceneSettingsChange={handleVrmSceneSettingsChange}
+          permissionPrompts={vrmPermissionPrompts}
+          queuedTasks={vrmQueuedTasks}
           resizeFrameVisible={vrmResizeFrameVisible}
           sceneSettings={vrmSceneSettings}
           stageFaded={vrmStageFaded}
@@ -838,6 +849,10 @@ export function isPetHitTarget(target: EventTarget | null): boolean {
 
 function isPetTaskBoundToSpriteAnimal(task: { petTargetKind?: string }): boolean {
   return !task.petTargetKind || task.petTargetKind === 'animal'
+}
+
+function isPetTaskBoundToVrmModel(task: { petTargetKind?: string }): boolean {
+  return task.petTargetKind === 'vrm-model'
 }
 
 export function buildPetTaskBindingByAnimalId(bindings: PetTaskBinding[]): Map<string, PetTaskBinding> {

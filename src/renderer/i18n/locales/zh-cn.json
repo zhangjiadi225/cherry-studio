@@ -6879,8 +6879,9 @@
           "sad": "难过",
           "surprised": "惊讶"
         },
+        "default_idle_animation": "默认待机动作",
         "fill_light": "补光",
-        "idle_motion": "待机骨骼",
+        "idle_motion": "播放待机动作",
         "import": "导入 VRM",
         "import_failed": "导入 VRM 模型失败：{{reason}}",
         "import_preset": "导入",

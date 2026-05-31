@@ -14,7 +14,7 @@ import {
   Clock,
   DirectionalLight,
   HemisphereLight,
-  Mesh,
+  type Mesh,
   MOUSE,
   Object3D,
   PerspectiveCamera,
@@ -29,6 +29,7 @@ import {
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
 import type {
+  PetVrmPresentationMotionState,
   PetVrmStageLookAtPoint,
   PetVrmStageModel,
   PetVrmStageModelLoadState,
@@ -56,6 +57,7 @@ type VrmPastureSceneProps = {
   onHitTestTransparencyChange?: (transparent: boolean) => void
   onModelLoadStateChange?: (state: PetVrmStageModelLoadState) => void
   onSceneSettingsChange?: (settings: PetVrmStageSceneSettings) => void
+  presentationMotionStates?: ReadonlyMap<string, PetVrmPresentationMotionState>
   sceneSettings?: PetVrmStageSceneSettings
   stageHeight: number
   stageWidth: number
@@ -152,6 +154,7 @@ const VrmPastureScene: FC<VrmPastureSceneProps> = ({
   onHitTestTransparencyChange,
   onModelLoadStateChange,
   onSceneSettingsChange,
+  presentationMotionStates,
   sceneSettings = PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS,
   stageHeight,
   stageWidth
@@ -165,6 +168,7 @@ const VrmPastureScene: FC<VrmPastureSceneProps> = ({
     onHitTestTransparencyChange,
     onModelLoadStateChange,
     onSceneSettingsChange,
+    presentationMotionStates,
     sceneSettings,
     stageHeight,
     stageWidth
@@ -177,6 +181,7 @@ const VrmPastureScene: FC<VrmPastureSceneProps> = ({
     onHitTestTransparencyChange,
     onModelLoadStateChange,
     onSceneSettingsChange,
+    presentationMotionStates,
     sceneSettings,
     stageHeight,
     stageWidth
@@ -538,7 +543,14 @@ function renderVrmSceneFrame(runtime: SceneRuntime, _timestamp: number, props: V
     const model = modelById.get(id)
     if (!model) continue
 
-    updateVrmModelTransform(modelRuntime, model, props, runtime.gazeTarget, lookAtKey, delta)
+    updateVrmModelTransform(
+      modelRuntime,
+      model,
+      getActiveVrmPresentationMotionState(props.presentationMotionStates?.get(model.modelId)),
+      runtime.gazeTarget,
+      lookAtKey,
+      delta
+    )
     modelRuntime.loaded?.vrm.update(delta)
   }
 
@@ -556,7 +568,7 @@ function getLookAtKey(target: Vector3): string {
 function updateVrmModelTransform(
   modelRuntime: VrmModelRuntime,
   model: PetVrmStageModel,
-  props: VrmPastureSceneProps,
+  motionState: PetVrmPresentationMotionState | null,
   gazeTarget: Object3D,
   lookAtKey: string,
   delta: number
@@ -570,7 +582,7 @@ function updateVrmModelTransform(
   loaded.root.scale.setScalar(1)
   loaded.root.position.set(model.positionX, model.positionY, model.positionZ)
   modelRuntime.animationMixer?.update(delta)
-  applyVrmModelPose(modelRuntime, loaded, model, gazeTarget, lookAtKey, delta)
+  applyVrmModelPose(modelRuntime, loaded, model, motionState, gazeTarget, lookAtKey, delta)
 }
 
 function bootstrapFirstReadyModel(runtime: SceneRuntime): void {
@@ -872,6 +884,7 @@ function applyVrmModelPose(
   modelRuntime: VrmModelRuntime,
   loaded: LoadedPetVrm,
   model: PetVrmStageModel,
+  motionState: PetVrmPresentationMotionState | null,
   gazeTarget: Object3D,
   lookAtKey: string,
   delta: number
@@ -880,10 +893,10 @@ function applyVrmModelPose(
   const expressionManager = loaded.vrm.expressionManager
 
   if (modelRuntime.animationMixer) {
-    modelRuntime.animationMixer.timeScale = idleMotion ? 1 : 0
+    modelRuntime.animationMixer.timeScale = motionState?.animationTimeScale ?? (idleMotion ? 1 : 0)
   }
 
-  applyExpression(model, expressionManager)
+  applyExpression(model, expressionManager, motionState)
   updatePetVrmBlink(loaded.vrm, modelRuntime.blinkRuntime, model.profile.blink ?? true, delta)
 
   const lookAtEnabled = model.profile.lookAtCursor ?? true
@@ -897,20 +910,34 @@ function applyVrmModelPose(
   }
 }
 
-function applyExpression(model: PetVrmStageModel, expressionManager: LoadedPetVrm['vrm']['expressionManager']): void {
+function applyExpression(
+  model: PetVrmStageModel,
+  expressionManager: LoadedPetVrm['vrm']['expressionManager'],
+  motionState: PetVrmPresentationMotionState | null
+): void {
   if (!expressionManager) return
 
   for (const expression of PET_VRM_EXPRESSION_PRESETS) {
     if (expression !== VRMExpressionPresetName.Blink) expressionManager.setValue(expression, 0)
   }
 
-  const expression = model.profile.expression ?? 'neutral'
-  if (expression === 'neutral' && model.profile.expressionIntensity == null) return
+  const expression = motionState?.expression ?? model.profile.expression ?? 'neutral'
+  const expressionIntensity = motionState?.expressionIntensity ?? model.profile.expressionIntensity
+  if (expression === 'neutral' && expressionIntensity == null) return
 
   const preset = PET_VRM_EXPRESSION_PRESET_BY_NAME[expression]
   if (preset) {
-    expressionManager.setValue(preset, model.profile.expressionIntensity ?? 0.65)
+    expressionManager.setValue(preset, expressionIntensity ?? 0.65)
   }
+}
+
+function getActiveVrmPresentationMotionState(
+  state: PetVrmPresentationMotionState | undefined,
+  now = Date.now()
+): PetVrmPresentationMotionState | null {
+  if (!state || state.phase === 'idle') return null
+  if (state.expiresAt !== undefined && state.expiresAt <= now) return null
+  return state
 }
 
 function getSceneLookAtTarget(runtime: SceneRuntime, props: VrmPastureSceneProps): Vector3 {

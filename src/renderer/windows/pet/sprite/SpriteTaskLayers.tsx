@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { dismissPetApproval, dismissPetTask, openPetTask } from '../presentation/petPresentationActions'
+import { getPetTaskPreview } from '../presentation/petTaskPreview'
 import type { PastureAnimalPosition } from './PastureAnimal'
 import { getPetTaskBubblePresentation, type PetTaskBubbleTone } from './petTaskPresentation'
 import {
@@ -27,7 +28,7 @@ import {
 
 export type PetSpriteSceneAnimal = Pick<
   PetAnimalInstance,
-  'agentId' | 'enabled' | 'homeXRatio' | 'id' | 'name' | 'order' | 'packageId' | 'personality'
+  'agentId' | 'createdAt' | 'enabled' | 'homeXRatio' | 'id' | 'name' | 'order' | 'packageId' | 'personality'
 >
 
 export type PetOverlayItem = {
@@ -124,17 +125,22 @@ const CONTROL_ISLAND_AUTO_CLEAR_MS = 3200
 const OVERLAY_TOP_PADDING = 4
 const OVERLAY_SIDE_GAP = 18
 const OPEN_PANEL_TRANSIENT_RETENTION_MS = 1200
-const PET_PREVIEW_REDACTED = '[REDACTED]'
-const PET_PREVIEW_SECRET_PATTERNS: RegExp[] = [
-  /-----BEGIN\s+(?:RSA\s+|EC\s+|OPENSSH\s+)?PRIVATE\s+KEY-----[\s\S]*?-----END\s+(?:RSA\s+|EC\s+|OPENSSH\s+)?PRIVATE\s+KEY-----/g,
-  /\bAKIA[0-9A-Z]{16}\b/g,
-  /Bearer\s+[A-Za-z0-9_\-.~+/]+=*/g,
-  /(?:api[_-]?key|api[_-]?secret|secret[_-]?key|password|passwd|token|access[_-]?token|client[_-]?secret|database[_-]?url)\s*[=:]\s*['"]?([^\s'"]{12,})['"]?/gi,
-  /\bghp_[A-Za-z0-9]{36,}\b/g,
-  /\bsk-ant-[A-Za-z0-9_-]{20,}\b/g,
-  /\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}/g,
-  /\b[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s'"]*(?:password|passwd|token|secret|key)[^\s'"]*/gi
-]
+const PET_TASK_STATUS_LABEL_KEYS: Record<PetTaskStatus, string> = {
+  aborted: 'settings.pet.bubble.status.aborted',
+  done: 'settings.pet.bubble.status.done',
+  failed: 'settings.pet.bubble.status.failed',
+  review: 'settings.pet.bubble.status.review',
+  running: 'settings.pet.bubble.status.running',
+  waiting: 'settings.pet.bubble.status.waiting'
+}
+const PET_QUEUE_REASON_LABEL_KEYS: Record<PetQueueReason, string> = {
+  'bound-busy': 'settings.pet.queue.reason.bound-busy',
+  'bound-disabled': 'settings.pet.queue.reason.bound-disabled',
+  'no-enabled-pet': 'settings.pet.queue.reason.no-enabled-pet',
+  'no-free-pet': 'settings.pet.queue.reason.no-free-pet'
+}
+
+export { getPetTaskPreview } from '../presentation/petTaskPreview'
 
 export function getPetTaskOverlayPriority(status: PetTaskStatus): number {
   switch (status) {
@@ -194,6 +200,7 @@ export function layoutPetOverlays(
   stageWidth: number,
   _openTaskKeys: ReadonlySet<string> = new Set()
 ): PetOverlayPlacement[] {
+  void _openTaskKeys
   return items.map((item, index) => {
     const x = clamp(item.anchorX - STATUS_BUBBLE_WIDTH / 2, 4, stageWidth - STATUS_BUBBLE_WIDTH - 4)
     const y = Math.max(OVERLAY_TOP_PADDING, item.anchorY - STATUS_BUBBLE_HEIGHT)
@@ -234,22 +241,6 @@ export function reconcileOpenTaskPanelKeys(input: {
   }
 
   return { missingSinceByTaskKey: nextMissingSince, openKeys: nextOpenKeys }
-}
-
-export function getPetTaskPreview(task: PetTaskBinding | PetTaskBubbleSnapshot): string {
-  const source = task.streamText || task.messages?.at(-1)?.text || ''
-  const cleaned = redactPetPreviewSecrets(source)
-    .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/`[^`]*`/g, ' ')
-    .replace(/\|.*\|/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-
-  const text = cleaned || task.title
-  const sentenceParts = text.split(/[.!?\u3002\uff01\uff1f]/u).filter(Boolean)
-  const tail = sentenceParts.length > 1 ? (sentenceParts.at(-1) ?? text) : text
-
-  return truncateText(tail.trim() || text, 140)
 }
 
 export function buildPetControlIslandViewModel(input: {
@@ -736,15 +727,6 @@ function layoutPermissionPrompts(
       zIndex: 240 + visiblePrompts.length - index
     }
   })
-}
-
-function redactPetPreviewSecrets(text: string): string {
-  let result = text
-  for (const pattern of PET_PREVIEW_SECRET_PATTERNS) {
-    pattern.lastIndex = 0
-    result = result.replace(pattern, PET_PREVIEW_REDACTED)
-  }
-  return result
 }
 
 function hasPeekPanelValue(task: PetTaskBinding | PetTaskBubbleSnapshot): boolean {
@@ -1324,7 +1306,7 @@ function PetThoughtBubble({
   const presentation = getPetTaskBubblePresentation(placement.item.status)
   const toneStyle = getOverlayToneStyle(presentation.tone)
   const { t } = useTranslation()
-  const statusLabel = t(`settings.pet.bubble.status.${placement.item.status}`)
+  const statusLabel = t(PET_TASK_STATUS_LABEL_KEYS[placement.item.status])
 
   return (
     <button
@@ -1437,7 +1419,7 @@ function getQueueReasonLabel(
   reason: PetQueueReason,
   t: (key: string, options?: Record<string, unknown>) => string
 ): string {
-  return t(`settings.pet.queue.reason.${reason}`)
+  return t(PET_QUEUE_REASON_LABEL_KEYS[reason])
 }
 
 function formatControlIslandHeadline(
@@ -1526,11 +1508,6 @@ function formatCountLabel(label: string, count: number): string {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max))
-}
-
-function truncateText(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text
-  return `${text.slice(0, maxLength - 1).trimEnd()}...`
 }
 
 function toTestId(value: string): string {

@@ -1,5 +1,10 @@
-import type { PetWindowResizeEdge } from '@shared/pet'
-import { PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS } from '@shared/pet'
+import {
+  PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS,
+  type PetPermissionPromptSnapshot,
+  type PetTaskBinding,
+  type PetTaskBubbleSnapshot,
+  type PetWindowResizeEdge
+} from '@shared/pet'
 import { ChevronUp, Eye, EyeOff, Grip, Moon, Pin, PinOff, RefreshCw, Settings, Sun, X } from 'lucide-react'
 import type { PointerEvent, ReactNode } from 'react'
 import { useCallback, useMemo, useState } from 'react'
@@ -13,6 +18,8 @@ import type {
   PetVrmStageSceneSettings
 } from './types'
 import VrmPastureScene from './VrmPastureScene'
+import { PetVrmPresentationLayer } from './VrmPresentationLayer'
+import { buildPetVrmPresentationMotionStateMap } from './VrmPresentationMotion'
 
 const PET_VRM_EDGE_RESIZE_HANDLE_WIDTH = 5
 const PET_VRM_RESIZE_FRAME_INSET = 4
@@ -21,6 +28,8 @@ const PET_VRM_RESIZE_FRAME_CORNER_SIZE = 22
 const PET_VRM_RESIZE_FRAME_CORNER_THICKNESS = 3
 
 type VrmStageSceneProps = {
+  bindings?: PetTaskBinding[]
+  bubbles?: PetTaskBubbleSnapshot[]
   fadeOnHoverEnabled?: boolean
   hitTestPoint?: PetVrmStageLookAtPoint | null
   modelProfiles: PetVrmStageModelProfileMap
@@ -34,6 +43,8 @@ type VrmStageSceneProps = {
   onResizePointerMove: (event: PointerEvent<HTMLDivElement>) => void
   onResizePointerUp: (event: PointerEvent<HTMLDivElement>) => void
   onSceneSettingsChange?: (settings: PetVrmStageSceneSettings) => void
+  permissionPrompts?: PetPermissionPromptSnapshot[]
+  queuedTasks?: PetTaskBinding[]
   resizeFrameVisible?: boolean
   sceneSettings?: PetVrmStageSceneSettings
   stageFaded?: boolean
@@ -42,6 +53,8 @@ type VrmStageSceneProps = {
 }
 
 export default function VrmStageScene({
+  bindings = [],
+  bubbles = [],
   fadeOnHoverEnabled,
   hitTestPoint,
   modelProfiles,
@@ -55,6 +68,8 @@ export default function VrmStageScene({
   onResizePointerMove,
   onResizePointerUp,
   onSceneSettingsChange,
+  permissionPrompts = [],
+  queuedTasks = [],
   resizeFrameVisible = false,
   sceneSettings = PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS,
   stageFaded = false,
@@ -62,6 +77,17 @@ export default function VrmStageScene({
   stageWidth
 }: VrmStageSceneProps) {
   const models = useMemo(() => buildPetVrmStageModels(modelProfiles), [modelProfiles])
+  const presentationMotionStates = useMemo(
+    () =>
+      buildPetVrmPresentationMotionStateMap({
+        bindings,
+        bubbles,
+        models,
+        permissionPrompts,
+        queuedTasks
+      }),
+    [bindings, bubbles, models, permissionPrompts, queuedTasks]
+  )
 
   return (
     <>
@@ -86,6 +112,7 @@ export default function VrmStageScene({
           onHitTestTransparencyChange={onHitTestTransparencyChange}
           onModelLoadStateChange={onModelLoadStateChange}
           onSceneSettingsChange={onSceneSettingsChange}
+          presentationMotionStates={presentationMotionStates}
           sceneSettings={sceneSettings}
           stageHeight={stageHeight}
           stageWidth={stageWidth}
@@ -150,6 +177,14 @@ export default function VrmStageScene({
       <PetVrmResizeFrame visible={resizeFrameVisible} />
       <PetVrmControlsIsland fadeOnHoverEnabled={fadeOnHoverEnabled} onFadeOnHoverChange={onFadeOnHoverChange} />
       <PetVrmStageStatusLayer modelLoadStates={modelLoadStates} models={models} />
+      <PetVrmPresentationLayer
+        bindings={bindings}
+        bubbles={bubbles}
+        models={models}
+        permissionPrompts={permissionPrompts}
+        queuedTasks={queuedTasks}
+        stageWidth={stageWidth}
+      />
     </>
   )
 }
