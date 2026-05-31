@@ -6,7 +6,12 @@ import type {
   PetTaskBinding,
   PetWindowBounds
 } from '@shared/pet'
-import { getPetDimensions, PET_PASTURE_MAX_WIDTH, PET_PASTURE_MIN_WIDTH } from '@shared/pet'
+import {
+  getPetDimensions,
+  PET_PASTURE_MAX_WIDTH,
+  PET_PASTURE_MIN_WIDTH,
+  PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS
+} from '@shared/pet'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createElement, useEffect } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -158,6 +163,12 @@ Object.defineProperty(window, 'api', {
       window: {
         resize: vi.fn()
       },
+      vrm: {
+        deleteStageModelProfile: vi.fn(),
+        getStageConfig: vi.fn(),
+        setStageModelProfile: vi.fn(),
+        setStageSceneSettings: vi.fn()
+      },
       setMouseEventsIgnored: vi.fn(),
       setTaskBubbleHold: vi.fn(),
       sendQuickReply: vi.fn(),
@@ -186,11 +197,24 @@ const preferenceMocks = vi.hoisted(() => ({
   petDndEnabled: false,
   petMode: 'sprite-pasture',
   petScale: 0.42,
+  vrmFadeOnHoverEnabled: false,
   vrmModelProfiles: {},
   vrmSceneSettings: {
     ambientLightIntensity: 2.2,
+    cameraFar: 2000,
+    cameraFov: 40,
+    cameraNear: 0.1,
+    cameraPositionX: 0,
+    cameraPositionY: 0,
+    cameraPositionZ: -1,
+    cameraTargetX: 0,
+    cameraTargetY: 0,
+    cameraTargetZ: 0,
     fillLightIntensity: 1.2,
-    keyLightIntensity: 2.8
+    keyLightIntensity: 2.8,
+    lookAtTargetX: 0,
+    lookAtTargetY: 0,
+    lookAtTargetZ: -100
   }
 }))
 
@@ -202,11 +226,9 @@ vi.mock('@data/hooks/usePreference', () => ({
         ? preferenceMocks.petMode
         : key === 'feature.pet.scale'
           ? preferenceMocks.petScale
-          : key === 'feature.pet.vrm.model_profiles'
-            ? preferenceMocks.vrmModelProfiles
-            : key === 'feature.pet.vrm.scene_settings'
-              ? preferenceMocks.vrmSceneSettings
-              : undefined,
+          : key === 'feature.pet.vrm.fade_on_hover_enabled'
+            ? preferenceMocks.vrmFadeOnHoverEnabled
+            : undefined,
     vi.fn()
   ]
 }))
@@ -245,12 +267,9 @@ describe('PetWindowApp helpers', () => {
     preferenceMocks.petDndEnabled = false
     preferenceMocks.petMode = 'sprite-pasture'
     preferenceMocks.petScale = 0.42
+    preferenceMocks.vrmFadeOnHoverEnabled = false
     preferenceMocks.vrmModelProfiles = {}
-    preferenceMocks.vrmSceneSettings = {
-      ambientLightIntensity: 2.2,
-      fillLightIntensity: 1.2,
-      keyLightIntensity: 2.8
-    }
+    preferenceMocks.vrmSceneSettings = { ...PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS }
     reportedAnimalPositions.clear()
     mouseStateChanged = null
     offMouseStateChanged.mockClear()
@@ -263,7 +282,9 @@ describe('PetWindowApp helpers', () => {
       bounds: { x: -1, y: -1, width: 640 },
       packages: [],
       permissionPrompts: [],
-      queuedTasks: []
+      queuedTasks: [],
+      vrmModelProfiles: preferenceMocks.vrmModelProfiles,
+      vrmSceneSettings: preferenceMocks.vrmSceneSettings
     })
     vi.mocked(window.api.pet.getWindowBounds).mockResolvedValue(bounds)
     vi.mocked(window.api.pet.moveWindow).mockResolvedValue(bounds)
@@ -279,10 +300,16 @@ describe('PetWindowApp helpers', () => {
     vi.mocked(window.api.pet.setMouseEventsIgnored).mockResolvedValue(undefined)
     vi.mocked(window.api.pet.setPin).mockResolvedValue(undefined)
     vi.mocked(window.api.pet.close).mockResolvedValue(false)
+    vi.mocked(window.api.pet.vrm.getStageConfig).mockImplementation(async () => ({
+      modelProfiles: preferenceMocks.vrmModelProfiles,
+      sceneSettings: preferenceMocks.vrmSceneSettings
+    }))
+    vi.mocked(window.api.pet.vrm.setStageModelProfile).mockImplementation(async (profile) => profile)
+    vi.mocked(window.api.pet.vrm.deleteStageModelProfile).mockResolvedValue(undefined)
+    vi.mocked(window.api.pet.vrm.setStageSceneSettings).mockImplementation(async (settings) => settings)
     vi.mocked(window.api.ai.agentPresentation.getReplay).mockResolvedValue([])
     vi.mocked(window.api.ai.agentPresentation.onEvent).mockReturnValue(vi.fn())
     vi.mocked(window.api.windowManager.openSettings).mockResolvedValue('')
-    window.localStorage.clear()
   })
 
   it('keeps right-edge resize anchored on the left', () => {
@@ -428,7 +455,9 @@ describe('PetWindowApp helpers', () => {
       bounds: { x: -1, y: -1, width: 640 },
       packages: [createPackage()],
       permissionPrompts: [],
-      queuedTasks: []
+      queuedTasks: [],
+      vrmModelProfiles: preferenceMocks.vrmModelProfiles,
+      vrmSceneSettings: preferenceMocks.vrmSceneSettings
     })
 
     render(createElement(PetWindowApp))
@@ -546,7 +575,7 @@ describe('PetWindowApp helpers', () => {
     preferenceMocks.vrmModelProfiles = {
       [profile.modelId]: profile
     }
-    window.localStorage.setItem('controls-island/fade-on-hover-enabled', 'true')
+    preferenceMocks.vrmFadeOnHoverEnabled = true
 
     render(createElement(PetWindowApp))
 
@@ -1179,7 +1208,9 @@ describe('PetWindowApp helpers', () => {
       bounds: { x: -1, y: -1, width: 640 },
       packages: [createPackage()],
       permissionPrompts: [],
-      queuedTasks: []
+      queuedTasks: [],
+      vrmModelProfiles: preferenceMocks.vrmModelProfiles,
+      vrmSceneSettings: preferenceMocks.vrmSceneSettings
     })
     vi.mocked(window.api.ai.agentPresentation.getReplay).mockResolvedValue([
       createAgentEvent('stream.started'),
@@ -1461,13 +1492,15 @@ describe('PetWindowApp helpers', () => {
       bounds: { x: -1, y: -1, width: 640 },
       packages: [createPackage()],
       permissionPrompts: [],
-      queuedTasks: []
+      queuedTasks: [],
+      vrmModelProfiles: preferenceMocks.vrmModelProfiles,
+      vrmSceneSettings: preferenceMocks.vrmSceneSettings
     }
-    let pastureChanged: ((snapshot: typeof initialSnapshot) => void) | undefined
+    const pastureChangedCallbacks: Array<(snapshot: typeof initialSnapshot) => void> = []
     let agentPresentationChanged: ((event: AgentPresentationEvent) => void) | undefined
     vi.mocked(window.api.pet.getPastureSnapshot).mockResolvedValue(initialSnapshot)
     vi.mocked(window.api.pet.onPastureChanged).mockImplementation((callback) => {
-      pastureChanged = callback as typeof pastureChanged
+      pastureChangedCallbacks.push(callback as (snapshot: typeof initialSnapshot) => void)
       return vi.fn()
     })
     vi.mocked(window.api.ai.agentPresentation.getReplay).mockResolvedValue([
@@ -1485,11 +1518,12 @@ describe('PetWindowApp helpers', () => {
     })
 
     act(() => {
-      pastureChanged?.({
+      const snapshot = {
         ...initialSnapshot,
         animals: [{ ...initialSnapshot.animals[0], enabled: false }],
         bindings: []
-      })
+      }
+      pastureChangedCallbacks.forEach((callback) => callback(snapshot))
     })
 
     await waitFor(() => {
@@ -1497,10 +1531,11 @@ describe('PetWindowApp helpers', () => {
     })
 
     act(() => {
-      pastureChanged?.({
+      const snapshot = {
         ...initialSnapshot,
         animals: [createAnimal('animal-a', 0.2)]
-      })
+      }
+      pastureChangedCallbacks.forEach((callback) => callback(snapshot))
       agentPresentationChanged?.(
         createAgentEvent('message.delta', { delta: 'again', sessionId: 'animal-a', timestamp: 1400 })
       )

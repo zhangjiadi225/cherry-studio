@@ -19,6 +19,11 @@ export type PetVrmIdleEyeSaccadeRuntime = {
   timeSinceLastSaccade: number
 }
 
+export type PetVrmRootPositionAnchor = {
+  nodeName: string
+  position: Vector3
+}
+
 type GltfWithVrmAnimations = {
   userData: {
     vrmAnimations?: VRMAnimation[]
@@ -64,16 +69,15 @@ export function createPetVrmAnimationClip(vrm: VRM, animation: VRMAnimation): An
   return createVRMAnimationClip(animation, vrm)
 }
 
-export function reAnchorRootPositionTrack(clip: AnimationClip, vrm: VRM): void {
+export function reAnchorRootPositionTrack(clip: AnimationClip, vrm: VRM, anchor?: PetVrmRootPositionAnchor): void {
   const hipNode = vrm.humanoid?.getNormalizedBoneNode('hips')
-  if (!hipNode) return
+  const anchorNodeName = anchor?.nodeName ?? hipNode?.name
+  if (!anchorNodeName) return
 
-  hipNode.updateMatrixWorld(true)
-  const defaultHipPosition = new Vector3()
-  hipNode.getWorldPosition(defaultHipPosition)
+  const defaultHipPosition = anchor?.position.clone() ?? getCurrentHipWorldPosition(hipNode)
 
   const hipsTrack = clip.tracks.find(
-    (track) => track instanceof VectorKeyframeTrack && track.name === `${hipNode.name}.position`
+    (track) => track instanceof VectorKeyframeTrack && track.name === `${anchorNodeName}.position`
   )
   if (!(hipsTrack instanceof VectorKeyframeTrack)) return
 
@@ -89,6 +93,15 @@ export function reAnchorRootPositionTrack(clip: AnimationClip, vrm: VRM): void {
       track.values[index + 2] -= animationDelta.z
     }
   }
+}
+
+function getCurrentHipWorldPosition(hipNode: Object3D | null | undefined): Vector3 {
+  if (!hipNode) return new Vector3()
+
+  hipNode.updateMatrixWorld(true)
+  const position = new Vector3()
+  hipNode.getWorldPosition(position)
+  return position
 }
 
 export function createPetVrmBlinkRuntime(): PetVrmBlinkRuntime {

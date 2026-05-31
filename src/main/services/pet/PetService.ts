@@ -11,11 +11,14 @@ import { WindowType } from '@main/core/window/types'
 import type { CherryMessagePart } from '@shared/data/types/message'
 import { IpcChannel } from '@shared/IpcChannel'
 import {
+  createPetVrmStageModelProfile,
   DEFAULT_PET_PERSONALITY,
   getLegacyAnimationName,
   getPetAnimationDuration,
   isPetAnimationName,
   isPetSemanticAnimationName,
+  normalizePetVrmStageModelProfileRecord,
+  normalizePetVrmStageSceneSettings,
   PET_PASTURE_DEFAULT_WIDTH,
   PET_PASTURE_HEIGHT,
   PET_PASTURE_MAX_WIDTH,
@@ -37,6 +40,9 @@ import {
   type PetSemanticAnimationName,
   type PetTaskBubbleHoldState,
   type PetTaskCommandResult,
+  type PetVrmStageConfig,
+  type PetVrmStageModelProfile,
+  type PetVrmStageSceneSettings,
   type PetVrmWindowBounds,
   type PetWindowBounds,
   type PetWindowPosition,
@@ -47,16 +53,13 @@ import type { BrowserWindow, Display } from 'electron'
 import { BrowserWindow as ElectronBrowserWindow, dialog, screen } from 'electron'
 import { startDrag } from 'electron-click-drag-plugin'
 
+import { createDefaultPetState, PetStateStore, type StoredPetState } from './PetStateStore'
 import { PetTaskController } from './PetTaskController'
 import { getPetPastureDisplayPoint, resolvePetPastureBounds } from './PetWindowBounds'
 
 const DEFAULT_BOTTOM_GAP = 0
 const PET_MOUSE_TRACKING_INTERVAL_MS = Math.round(1000 / 60)
 const PET_BOUNDS_PERSIST_DEBOUNCE_MS = 150
-const PET_VRM_STAGE_LEGACY_DEFAULT_BOUNDS = [
-  { height: 520, width: 720 },
-  { height: 720, width: 360 }
-] as const
 const PET_SERVICE_SEMANTIC_ANIMATIONS = [
   'idle',
   'walkLeft',
@@ -94,8 +97,14 @@ export class PetService extends BaseService implements Activatable {
   private mouseTrackingTimer: NodeJS.Timeout | null = null
   private mouseTrackingSenderId: number | null = null
   private boundsPersistTimer: NodeJS.Timeout | null = null
+  private readonly stateStore = new PetStateStore()
+  private stateCache: StoredPetState = createDefaultPetState()
+  private stateLoaded = false
+  private stateLoadPromise: Promise<StoredPetState> | null = null
+  private stateWriteQueue: Promise<void> = Promise.resolve()
 
   protected async onInit() {
+    await this.loadPetState()
     this.registerIpcHandlers()
     this.subscribeWindowLifecycle()
     this.subscribePreferences()
@@ -285,8 +294,8 @@ export class PetService extends BaseService implements Activatable {
   }
 
   public async getPastureSnapshot(): Promise<PetPastureSnapshot> {
-    const packages = await this.listPackages()
-    const animals = await this.getAnimals()
+    const [packages, state] = await Promise.all([this.listPackages(), this.getPetState()])
+    const animals = this.getAnimalsFromState(state)
     return {
       packages,
       animals,
@@ -294,8 +303,74 @@ export class PetService extends BaseService implements Activatable {
       queuedTasks: [],
       bubbles: [],
       permissionPrompts: [],
-      bounds: this.getPasturePreferenceBounds()
+      bounds: this.getPastureStoredBounds(state),
+      vrmModelProfiles: { ...state.vrm.modelProfiles },
+      vrmSceneSettings: { ...state.vrm.sceneSettings }
     }
+  }
+
+  public async getVrmStageConfig(): Promise<PetVrmStageConfig> {
+    const state = await this.getPetState()
+    return this.getVrmStageConfigFromState(state)
+  }
+
+  public async setVrmStageModelProfile(input: unknown): Promise<PetVrmStageModelProfile> {
+    let nextProfile: PetVrmStageModelProfile | null = null
+
+    await this.updatePetState((state) => {
+      if (!isRecord(input)) {
+        throw new Error('VRM stage model profile must be an object')
+      }
+      const modelId = typeof input.modelId === 'string' ? input.modelId.trim() : ''
+      const previous = modelId ? state.vrm.modelProfiles[modelId] : undefined
+      nextProfile = createPetVrmStageModelProfile(input as Partial<PetVrmStageModelProfile>, previous)
+      return {
+        ...state,
+        vrm: {
+          ...state.vrm,
+          modelProfiles: {
+            ...state.vrm.modelProfiles,
+            [nextProfile.modelId]: nextProfile
+          }
+        }
+      }
+    })
+    void this.broadcastPastureChanged()
+    if (!nextProfile) {
+      throw new Error('VRM stage model profile was not saved')
+    }
+    return nextProfile
+  }
+
+  public async deleteVrmStageModelProfile(modelId: unknown): Promise<void> {
+    const id = this.parseRequiredString(modelId, 'VRM model id')
+
+    await this.updatePetState((state) => {
+      const modelProfiles = { ...state.vrm.modelProfiles }
+      delete modelProfiles[id]
+      return {
+        ...state,
+        vrm: {
+          ...state.vrm,
+          modelProfiles
+        }
+      }
+    })
+    void this.broadcastPastureChanged()
+  }
+
+  public async setVrmStageSceneSettings(input: unknown): Promise<PetVrmStageSceneSettings> {
+    const sceneSettings = normalizePetVrmStageSceneSettings(input)
+
+    await this.updatePetState((state) => ({
+      ...state,
+      vrm: {
+        ...state.vrm,
+        sceneSettings
+      }
+    }))
+    void this.broadcastPastureChanged()
+    return sceneSettings
   }
 
   public getWindowBounds(): PetWindowBounds | null {
@@ -465,6 +540,16 @@ export class PetService extends BaseService implements Activatable {
     )
     this.ipcHandle(IpcChannel.Pet_ReorderAnimals, (_event, instanceIds: unknown) => this.reorderAnimals(instanceIds))
     this.ipcHandle(IpcChannel.Pet_GetPastureSnapshot, () => this.getPastureSnapshot())
+    this.ipcHandle(IpcChannel.Pet_GetVrmStageConfig, () => this.getVrmStageConfig())
+    this.ipcHandle(IpcChannel.Pet_SetVrmStageModelProfile, (_event, profile: unknown) =>
+      this.setVrmStageModelProfile(profile)
+    )
+    this.ipcHandle(IpcChannel.Pet_DeleteVrmStageModelProfile, (_event, modelId: unknown) =>
+      this.deleteVrmStageModelProfile(modelId)
+    )
+    this.ipcHandle(IpcChannel.Pet_SetVrmStageSceneSettings, (_event, settings: unknown) =>
+      this.setVrmStageSceneSettings(settings)
+    )
     this.ipcHandle(IpcChannel.Pet_ResizePasture, (_event, input: unknown) => this.resizePasture(input))
     this.ipcHandle(IpcChannel.Pet_ResizeWindow, (_event, input: unknown) => this.resizeWindow(input))
     this.ipcHandle(IpcChannel.Pet_DismissTaskBubble, (_event, taskKey: unknown) =>
@@ -530,11 +615,6 @@ export class PetService extends BaseService implements Activatable {
     this.registerDisposable(
       preferenceService.subscribeChange('feature.pet.mode', () => {
         void this.applyCurrentBounds().then(() => this.broadcastPastureChanged())
-      })
-    )
-    this.registerDisposable(
-      preferenceService.subscribeChange('feature.pet.animals', () => {
-        void this.broadcastPastureChanged()
       })
     )
     this.registerDisposable(
@@ -606,6 +686,46 @@ export class PetService extends BaseService implements Activatable {
 
   private broadcastPackageChanged(petPackage?: PetPackageInfo | null): void {
     application.get('WindowManager').broadcastToType(WindowType.Pet, IpcChannel.Pet_PackageChanged, petPackage ?? null)
+  }
+
+  private async loadPetState(): Promise<StoredPetState> {
+    if (this.stateLoaded) return this.stateCache
+    if (!this.stateLoadPromise) {
+      this.stateLoadPromise = this.stateStore.read()
+    }
+    this.stateCache = await this.stateLoadPromise
+    this.stateLoaded = true
+    return this.stateCache
+  }
+
+  private async getPetState(): Promise<StoredPetState> {
+    return this.loadPetState()
+  }
+
+  private getPetStateSync(): StoredPetState {
+    return this.stateCache
+  }
+
+  private async updatePetState(updater: (state: StoredPetState) => StoredPetState): Promise<StoredPetState> {
+    const run = this.stateWriteQueue.then(async () => {
+      const current = await this.getPetState()
+      const next = await this.stateStore.write(updater(current))
+      this.stateCache = next
+      this.stateLoaded = true
+      return next
+    })
+    this.stateWriteQueue = run.then(
+      () => undefined,
+      () => undefined
+    )
+    return run
+  }
+
+  private getVrmStageConfigFromState(state: StoredPetState): PetVrmStageConfig {
+    return {
+      modelProfiles: { ...normalizePetVrmStageModelProfileRecord(state.vrm.modelProfiles) },
+      sceneSettings: normalizePetVrmStageSceneSettings(state.vrm.sceneSettings)
+    }
   }
 
   private releaseWindow(): void {
@@ -708,7 +828,7 @@ export class PetService extends BaseService implements Activatable {
 
   private getPreferredBounds(): PetWindowBounds {
     if (this.getCurrentSceneMode() === 'vrm-stage') {
-      const bounds = this.getVrmWindowPreferenceBounds()
+      const bounds = this.getVrmWindowStoredBounds()
       if (bounds.x >= 0 && bounds.y >= 0) return this.clampFreeBounds(bounds)
 
       const workArea = screen.getPrimaryDisplay().workArea
@@ -719,7 +839,7 @@ export class PetService extends BaseService implements Activatable {
       })
     }
 
-    const pastureBounds = this.getPasturePreferenceBounds()
+    const pastureBounds = this.getPastureStoredBounds()
     const width = pastureBounds.width
 
     if (pastureBounds.x >= 0 && pastureBounds.y >= 0) {
@@ -744,8 +864,8 @@ export class PetService extends BaseService implements Activatable {
     )
   }
 
-  private getPasturePreferenceBounds(): PetPastureBounds {
-    const stored = application.get('PreferenceService').get('feature.pet.pasture_bounds')
+  private getPastureStoredBounds(state: StoredPetState = this.getPetStateSync()): PetPastureBounds {
+    const stored = state.pastureBounds
     const width = this.clampWidth(
       stored.width,
       screen.getPrimaryDisplay()?.workArea?.width ?? PET_PASTURE_DEFAULT_WIDTH
@@ -757,34 +877,35 @@ export class PetService extends BaseService implements Activatable {
     }
   }
 
-  private getVrmWindowPreferenceBounds(): PetVrmWindowBounds {
-    const stored = application.get('PreferenceService').get('feature.pet.vrm.window_bounds')
+  private getVrmWindowStoredBounds(state: StoredPetState = this.getPetStateSync()): PetVrmWindowBounds {
+    const stored = state.vrm.windowBounds
     const workArea = screen.getPrimaryDisplay()?.workArea
     const maxWidth = workArea?.width ?? PET_VRM_STAGE_DEFAULT_WIDTH
     const maxHeight = workArea?.height ?? PET_VRM_STAGE_DEFAULT_HEIGHT
-    const storedIsLegacyDefault =
-      stored.x === -1 &&
-      stored.y === -1 &&
-      PET_VRM_STAGE_LEGACY_DEFAULT_BOUNDS.some(
-        (bounds) => stored.width === bounds.width && stored.height === bounds.height
-      )
-    const width = storedIsLegacyDefault ? PET_VRM_STAGE_DEFAULT_WIDTH : stored.width
-    const height = storedIsLegacyDefault ? PET_VRM_STAGE_DEFAULT_HEIGHT : stored.height
 
     return {
       x: Number.isFinite(stored.x) ? stored.x : -1,
       y: Number.isFinite(stored.y) ? stored.y : -1,
-      width: clampNumber(width, PET_VRM_STAGE_MIN_WIDTH, maxWidth),
-      height: clampNumber(height, PET_VRM_STAGE_MIN_HEIGHT, maxHeight)
+      width: clampNumber(stored.width, PET_VRM_STAGE_MIN_WIDTH, maxWidth),
+      height: clampNumber(stored.height, PET_VRM_STAGE_MIN_HEIGHT, maxHeight)
     }
   }
 
   private async persistPastureBounds(bounds: PetPastureBounds): Promise<void> {
-    await application.get('PreferenceService').set('feature.pet.pasture_bounds', bounds)
+    await this.updatePetState((state) => ({
+      ...state,
+      pastureBounds: bounds
+    }))
   }
 
   private async persistVrmWindowBounds(bounds: PetVrmWindowBounds): Promise<void> {
-    await application.get('PreferenceService').set('feature.pet.vrm.window_bounds', bounds)
+    await this.updatePetState((state) => ({
+      ...state,
+      vrm: {
+        ...state.vrm,
+        windowBounds: bounds
+      }
+    }))
   }
 
   private async persistBoundsForMode(mode: PetSceneMode, bounds: PetWindowBounds): Promise<void> {
@@ -965,8 +1086,11 @@ export class PetService extends BaseService implements Activatable {
   }
 
   private async getAnimals(): Promise<PetAnimalInstance[]> {
-    const animals = application.get('PreferenceService').get('feature.pet.animals')
-    return animals
+    return this.getAnimalsFromState(await this.getPetState())
+  }
+
+  private getAnimalsFromState(state: StoredPetState): PetAnimalInstance[] {
+    return state.animals
       .map((animal) => this.normalizeAnimal(animal))
       .sort((a, b) => a.order - b.order)
       .map((animal, order) => ({ ...animal, order }))
@@ -977,7 +1101,10 @@ export class PetService extends BaseService implements Activatable {
       .map((animal) => this.normalizeAnimal(animal))
       .sort((a, b) => a.order - b.order)
       .map((animal, order) => ({ ...animal, order }))
-    await application.get('PreferenceService').set('feature.pet.animals', normalized)
+    await this.updatePetState((state) => ({
+      ...state,
+      animals: normalized
+    }))
   }
 
   private async ensureDefaultAnimal(packages: PetPackageInfo[] = []): Promise<void> {
@@ -1034,6 +1161,13 @@ export class PetService extends BaseService implements Activatable {
   private parsePackageId(value: unknown): string {
     if (typeof value !== 'string' || !value.trim()) {
       throw new Error('Pet package id must be a non-empty string')
+    }
+    return value.trim()
+  }
+
+  private parseRequiredString(value: unknown, label: string): string {
+    if (typeof value !== 'string' || !value.trim()) {
+      throw new Error(`${label} must be a non-empty string`)
     }
     return value.trim()
   }

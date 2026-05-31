@@ -100,7 +100,9 @@ function mergePetPresentationBaseSnapshot(
     bounds: snapshot.bounds,
     packages: snapshot.packages,
     permissionPrompts: current.permissionPrompts.filter((prompt) => enabledAnimalIds.has(prompt.animalId)),
-    queuedTasks: current.queuedTasks.filter((task) => !task.animalId || enabledAnimalIds.has(task.animalId))
+    queuedTasks: current.queuedTasks.filter((task) => !task.animalId || enabledAnimalIds.has(task.animalId)),
+    vrmModelProfiles: snapshot.vrmModelProfiles,
+    vrmSceneSettings: snapshot.vrmSceneSettings
   }
 }
 

@@ -100,6 +100,9 @@ import type {
   PetTaskBubbleHoldState,
   PetTaskCommand,
   PetTaskCommandResult,
+  PetVrmStageConfig,
+  PetVrmStageModelProfile,
+  PetVrmStageSceneSettings,
   PetWindowBounds,
   PetWindowPosition,
   PetWindowResizeRequest
@@ -501,6 +504,15 @@ const api = {
     reorderAnimals: (instanceIds: string[]): Promise<PetAnimalInstance[]> =>
       ipcRenderer.invoke(IpcChannel.Pet_ReorderAnimals, instanceIds),
     getPastureSnapshot: (): Promise<PetPastureSnapshot> => ipcRenderer.invoke(IpcChannel.Pet_GetPastureSnapshot),
+    vrm: {
+      getStageConfig: (): Promise<PetVrmStageConfig> => ipcRenderer.invoke(IpcChannel.Pet_GetVrmStageConfig),
+      setStageModelProfile: (profile: PetVrmStageModelProfile): Promise<PetVrmStageModelProfile> =>
+        ipcRenderer.invoke(IpcChannel.Pet_SetVrmStageModelProfile, profile),
+      deleteStageModelProfile: (modelId: string): Promise<void> =>
+        ipcRenderer.invoke(IpcChannel.Pet_DeleteVrmStageModelProfile, modelId),
+      setStageSceneSettings: (settings: PetVrmStageSceneSettings): Promise<PetVrmStageSceneSettings> =>
+        ipcRenderer.invoke(IpcChannel.Pet_SetVrmStageSceneSettings, settings)
+    },
     resizePasture: (request: PetPastureResizeRequest | number): Promise<PetWindowBounds | null> =>
       ipcRenderer.invoke(IpcChannel.Pet_ResizePasture, request),
     tasks: {

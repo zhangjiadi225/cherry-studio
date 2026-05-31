@@ -1,5 +1,5 @@
 import type { AgentPresentationEvent } from '@shared/ai/agentPresentationEvents'
-import type { PetPastureSnapshot } from '@shared/pet'
+import { PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS, type PetPastureSnapshot } from '@shared/pet'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import { createElement } from 'react'
 import { describe, expect, it, vi } from 'vitest'
@@ -101,7 +101,9 @@ function createSnapshot(): PetPastureSnapshot {
     bounds: { x: -1, y: -1, width: 640 },
     packages: [],
     permissionPrompts: [],
-    queuedTasks: []
+    queuedTasks: [],
+    vrmModelProfiles: {},
+    vrmSceneSettings: { ...PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS }
   }
 }
 

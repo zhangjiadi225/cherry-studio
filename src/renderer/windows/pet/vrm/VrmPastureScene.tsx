@@ -1,5 +1,9 @@
 import { VRMExpressionPresetName } from '@pixiv/three-vrm'
-import { PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS, type PetVrmStageAnimationPreset } from '@shared/pet'
+import {
+  normalizePetVrmStageSceneSettings,
+  PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS,
+  type PetVrmStageAnimationPreset
+} from '@shared/pet'
 import type { FC } from 'react'
 import { useEffect, useRef } from 'react'
 import {
@@ -51,6 +55,7 @@ type VrmPastureSceneProps = {
   models: PetVrmStageModel[]
   onHitTestTransparencyChange?: (transparent: boolean) => void
   onModelLoadStateChange?: (state: PetVrmStageModelLoadState) => void
+  onSceneSettingsChange?: (settings: PetVrmStageSceneSettings) => void
   sceneSettings?: PetVrmStageSceneSettings
   stageHeight: number
   stageWidth: number
@@ -68,16 +73,19 @@ type SceneRuntime = {
   frameId: number | null
   gazeTarget: Object3D
   hemisphereLight: HemisphereLight
+  lastCameraSettingsKey: string
   lastHitTestKey: string | null
   lastHitTestTransparent: boolean | null
   modelOrigin: Vector3
   modelSize: Vector3
   models: Map<string, VrmModelRuntime>
+  onSceneSettingsChange?: (settings: PetVrmStageSceneSettings) => void
   raycaster: Raycaster
   renderTarget: WebGLRenderTarget | null
   renderTargetSize: Vector2
   renderer: WebGLRenderer
   scene: Scene
+  sceneSettings: PetVrmStageSceneSettings
 }
 
 type VrmModelRuntime = {
@@ -121,11 +129,8 @@ export type RenderTargetRegionRead = {
 }
 
 const VRM_MAX_PIXEL_RATIO = 2
-const VRM_STAGE_CAMERA_FOV = 40
-const VRM_STAGE_CAMERA_NEAR = 0.1
-const VRM_STAGE_CAMERA_FAR = 2000
 const VRM_STAGE_DEFAULT_CAMERA_DISTANCE = 1
-const VRM_STAGE_DEFAULT_CAMERA_POSITION = new Vector3(0, 0, -1)
+const VRM_STAGE_FALLBACK_CAMERA_DIRECTION = new Vector3(0, 0, -1)
 const VRM_STAGE_KEY_LIGHT_POSITION = new Vector3(0, 0, -1)
 const VRM_STAGE_KEY_LIGHT_TARGET = new Vector3(0, 0, 0)
 const VRM_STAGE_KEY_LIGHT_INTENSITY = 2.02
@@ -135,10 +140,9 @@ const VRM_STAGE_KEY_LIGHT_COLOR = 0xfffbf5
 const VRM_STAGE_AMBIENT_LIGHT_COLOR = 0xffffff
 const VRM_STAGE_HEMISPHERE_SKY_COLOR = 0xffffff
 const VRM_STAGE_HEMISPHERE_GROUND_COLOR = 0x222222
-const VRM_STAGE_DEFAULT_LOOK_AT_DEPTH = -100
 const VRM_STAGE_HIT_TEST_ALPHA_THRESHOLD = 10
 const VRM_STAGE_HIT_TEST_REGION_RADIUS = 25
-const DEFAULT_LOOK_AT_TARGET = new Vector3(0, 0, VRM_STAGE_DEFAULT_LOOK_AT_DEPTH)
+const DEFAULT_LOOK_AT_TARGET = getSceneSettingsLookAtTarget(PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS)
 const MIN_MODEL_DEPTH_FOR_DISTANCE_BOUNDS = 1e-6
 
 const VrmPastureScene: FC<VrmPastureSceneProps> = ({
@@ -147,6 +151,7 @@ const VrmPastureScene: FC<VrmPastureSceneProps> = ({
   models,
   onHitTestTransparencyChange,
   onModelLoadStateChange,
+  onSceneSettingsChange,
   sceneSettings = PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS,
   stageHeight,
   stageWidth
@@ -159,6 +164,7 @@ const VrmPastureScene: FC<VrmPastureSceneProps> = ({
     models,
     onHitTestTransparencyChange,
     onModelLoadStateChange,
+    onSceneSettingsChange,
     sceneSettings,
     stageHeight,
     stageWidth
@@ -170,6 +176,7 @@ const VrmPastureScene: FC<VrmPastureSceneProps> = ({
     models,
     onHitTestTransparencyChange,
     onModelLoadStateChange,
+    onSceneSettingsChange,
     sceneSettings,
     stageHeight,
     stageWidth
@@ -179,6 +186,7 @@ const VrmPastureScene: FC<VrmPastureSceneProps> = ({
     const canvas = canvasRef.current
     if (!canvas) return
     const initialProps = latestPropsRef.current
+    const initialSceneSettings = normalizePetVrmStageSceneSettings(initialProps.sceneSettings)
 
     const renderer = new WebGLRenderer({
       alpha: true,
@@ -214,13 +222,15 @@ const VrmPastureScene: FC<VrmPastureSceneProps> = ({
     scene.add(gazeTarget)
 
     const camera = new PerspectiveCamera(
-      VRM_STAGE_CAMERA_FOV,
+      initialSceneSettings.cameraFov,
       getCameraAspect(initialProps.stageWidth, initialProps.stageHeight),
-      VRM_STAGE_CAMERA_NEAR,
-      VRM_STAGE_CAMERA_FAR
+      initialSceneSettings.cameraNear,
+      initialSceneSettings.cameraFar
     )
-    camera.position.copy(VRM_STAGE_DEFAULT_CAMERA_POSITION)
-    camera.lookAt(new Vector3(0, 0, 0))
+    const initialCameraPosition = getSceneSettingsCameraPosition(initialSceneSettings)
+    const initialCameraTarget = getSceneSettingsCameraTarget(initialSceneSettings)
+    camera.position.copy(initialCameraPosition)
+    camera.lookAt(initialCameraTarget)
 
     const controls = new OrbitControls(camera, canvas)
     controls.enablePan = false
@@ -240,29 +250,34 @@ const VrmPastureScene: FC<VrmPastureSceneProps> = ({
       ambientLight,
       applyingCameraState: false,
       camera,
-      cameraDistance: VRM_STAGE_DEFAULT_CAMERA_DISTANCE,
-      cameraDirection: VRM_STAGE_DEFAULT_CAMERA_POSITION.clone().normalize(),
+      cameraDistance: getCameraDistance(initialCameraPosition, initialCameraTarget),
+      cameraDirection: getSceneSettingsCameraDirection(initialSceneSettings),
       clock: new Clock(),
       controls,
       directionalLight,
       frameId: null,
       gazeTarget,
       hemisphereLight,
+      lastCameraSettingsKey: getSceneCameraSettingsKey(initialSceneSettings),
       lastHitTestKey: null,
       lastHitTestTransparent: null,
-      modelOrigin: new Vector3(),
+      modelOrigin: initialCameraTarget.clone(),
       modelSize: new Vector3(),
       models: new Map(),
+      onSceneSettingsChange: initialProps.onSceneSettingsChange,
       raycaster: new Raycaster(),
       renderer,
       renderTarget: null,
       renderTargetSize: new Vector2(),
-      scene
+      scene,
+      sceneSettings: initialSceneSettings
     }
     runtimeRef.current = runtime
 
     const handleControlsChange = () => syncCameraStateFromOrbitControls(runtime)
+    const handleControlsEnd = () => emitCameraSceneSettings(runtime)
     controls.addEventListener('change', handleControlsChange)
+    controls.addEventListener('end', handleControlsEnd)
 
     applySceneSettings(runtime, initialProps.sceneSettings)
     resizeSceneRuntime(runtime, initialProps.stageWidth, initialProps.stageHeight)
@@ -277,6 +292,7 @@ const VrmPastureScene: FC<VrmPastureSceneProps> = ({
     return () => {
       if (runtime.frameId !== null) cancelAnimationFrame(runtime.frameId)
       controls.removeEventListener('change', handleControlsChange)
+      controls.removeEventListener('end', handleControlsEnd)
       disposeSceneRuntime(runtime)
       runtimeRef.current = null
     }
@@ -286,8 +302,19 @@ const VrmPastureScene: FC<VrmPastureSceneProps> = ({
     const runtime = runtimeRef.current
     if (!runtime) return
     applySceneSettings(runtime, sceneSettings)
+  }, [sceneSettings])
+
+  useEffect(() => {
+    const runtime = runtimeRef.current
+    if (!runtime) return
     resizeSceneRuntime(runtime, stageWidth, stageHeight)
-  }, [sceneSettings, stageHeight, stageWidth])
+  }, [stageHeight, stageWidth])
+
+  useEffect(() => {
+    const runtime = runtimeRef.current
+    if (!runtime) return
+    runtime.onSceneSettingsChange = onSceneSettingsChange
+  }, [onSceneSettingsChange])
 
   useEffect(() => {
     const runtime = runtimeRef.current
@@ -351,7 +378,6 @@ function syncVrmStageModels(runtime: SceneRuntime, props: VrmPastureSceneProps):
     if (modelRuntime.modelId === model.modelId && modelRuntime.animationPreset !== model.profile.animationPreset) {
       modelRuntime.animationPreset = model.profile.animationPreset
       modelRuntime.loadGeneration += 1
-      modelRuntime.bootstrapped = false
       if (modelRuntime.loaded) {
         const loaded = modelRuntime.loaded
         modelRuntime.animationMixer?.stopAllAction()
@@ -489,10 +515,15 @@ async function createStageModelAnimationMixer(
   if (!animation) throw new Error('No VRM animation loaded')
 
   const clip = createPetVrmAnimationClip(loaded.vrm, animation)
-  reAnchorRootPositionTrack(clip, loaded.vrm)
+  if (loaded.animationAnchor) {
+    reAnchorRootPositionTrack(clip, loaded.vrm, loaded.animationAnchor)
+  } else {
+    reAnchorRootPositionTrack(clip, loaded.vrm)
+  }
 
   const mixer = new AnimationMixer(loaded.vrm.scene)
   mixer.clipAction(clip).play()
+  mixer.update(0)
   return mixer
 }
 
@@ -546,7 +577,7 @@ function bootstrapFirstReadyModel(runtime: SceneRuntime): void {
   for (const modelRuntime of [...runtime.models.values()].sort((left, right) => left.order - right.order)) {
     if (!modelRuntime.loaded || modelRuntime.loading) continue
     if (!modelRuntime.bootstrapped) {
-      const bootstrap = buildVrmStageSceneBootstrap(modelRuntime.loaded.vrm, runtime.camera)
+      const bootstrap = buildVrmStageSceneBootstrap(modelRuntime.loaded.vrm, runtime.camera, runtime.sceneSettings)
       applyVrmStageSceneBootstrap(runtime, bootstrap)
       modelRuntime.bootstrapped = true
     }
@@ -557,8 +588,10 @@ function bootstrapFirstReadyModel(runtime: SceneRuntime): void {
 
 export function buildVrmStageSceneBootstrap(
   activeVrm: LoadedPetVrm['vrm'],
-  camera: PerspectiveCamera
+  camera: PerspectiveCamera,
+  settings: PetVrmStageSceneSettings = PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS
 ): VrmStageSceneBootstrap {
+  const sceneSettings = normalizePetVrmStageSceneSettings(settings)
   const bootstrapRoot = activeVrm.scene.parent ?? activeVrm.scene
   const box = computeVrmModelBoundingBox(bootstrapRoot)
   const modelSize = new Vector3()
@@ -567,20 +600,30 @@ export function buildVrmStageSceneBootstrap(
   box.getCenter(modelCenter)
   modelCenter.y += modelSize.y / 5
 
-  const fov = camera.fov ?? VRM_STAGE_CAMERA_FOV
+  const fov = Number.isFinite(camera.fov) ? camera.fov : sceneSettings.cameraFov
   const radians = (fov / 2) * (Math.PI / 180)
-  const initialCameraOffset = new Vector3(modelSize.x / 16, modelSize.y / 8, -(modelSize.y / 3) / Math.tan(radians))
+  const cameraDistance = modelSize.y / 3 / Math.tan(radians)
+  const initialCameraOffset = new Vector3(modelSize.x / 16, modelSize.y / 8, 0).addScaledVector(
+    getSceneSettingsCameraDirection(sceneSettings),
+    cameraDistance
+  )
 
   const eyeHeight = getEyePosition(activeVrm) ?? modelCenter.y
-  const cameraPosition = modelCenter.clone().add(initialCameraOffset)
+  const cameraPoseIsDefault = getSceneCameraPoseSettingsKey(sceneSettings) === getSceneCameraPoseSettingsKey()
+  const modelOrigin = cameraPoseIsDefault ? modelCenter : getSceneSettingsCameraTarget(sceneSettings)
+  const cameraPosition = cameraPoseIsDefault
+    ? modelCenter.clone().add(initialCameraOffset)
+    : getSceneSettingsCameraPosition(sceneSettings)
+  const lookAtTarget = getSceneSettingsLookAtTarget(sceneSettings)
+  lookAtTarget.y += eyeHeight
 
   return {
-    cameraDistance: cameraPosition.distanceTo(modelCenter),
+    cameraDistance: getCameraDistance(cameraPosition, modelOrigin),
     cameraPosition,
     eyeHeight,
-    lookAtTarget: new Vector3(0, eyeHeight, VRM_STAGE_DEFAULT_LOOK_AT_DEPTH),
+    lookAtTarget,
     modelOffset: bootstrapRoot.position.clone(),
-    modelOrigin: modelCenter,
+    modelOrigin,
     modelSize
   }
 }
@@ -624,12 +667,13 @@ function applyVrmStageSceneBootstrap(runtime: SceneRuntime, bootstrap: VrmStageS
   runtime.cameraDistance = bootstrap.cameraDistance
   runtime.cameraDirection.copy(bootstrap.cameraPosition).sub(bootstrap.modelOrigin)
   if (runtime.cameraDirection.lengthSq() <= 1e-6) {
-    runtime.cameraDirection.copy(VRM_STAGE_DEFAULT_CAMERA_POSITION)
+    runtime.cameraDirection.copy(VRM_STAGE_FALLBACK_CAMERA_DIRECTION)
   }
   runtime.cameraDirection.normalize()
   runtime.gazeTarget.position.copy(bootstrap.lookAtTarget)
   applyOrbitDistanceBounds(runtime, bootstrap.modelSize)
   applyCameraPosition(runtime)
+  emitCameraSceneSettings(runtime)
 }
 
 function applyOrbitDistanceBounds(runtime: SceneRuntime, modelSize: Vector3): void {
@@ -653,6 +697,67 @@ function resizeSceneRuntime(runtime: SceneRuntime, width: number, height: number
 
 function getCameraAspect(width: number, height: number): number {
   return Math.max(1, width) / Math.max(1, height)
+}
+
+function getSceneSettingsCameraPosition(settings: PetVrmStageSceneSettings): Vector3 {
+  return new Vector3(settings.cameraPositionX, settings.cameraPositionY, settings.cameraPositionZ)
+}
+
+function getSceneSettingsCameraTarget(settings: PetVrmStageSceneSettings): Vector3 {
+  return new Vector3(settings.cameraTargetX, settings.cameraTargetY, settings.cameraTargetZ)
+}
+
+function getSceneSettingsCameraDirection(settings: PetVrmStageSceneSettings): Vector3 {
+  const direction = getSceneSettingsCameraPosition(settings).sub(getSceneSettingsCameraTarget(settings))
+  if (direction.lengthSq() <= 1e-6) {
+    return VRM_STAGE_FALLBACK_CAMERA_DIRECTION.clone()
+  }
+  return direction.normalize()
+}
+
+function getSceneSettingsLookAtTarget(settings: PetVrmStageSceneSettings): Vector3 {
+  return new Vector3(settings.lookAtTargetX, settings.lookAtTargetY, settings.lookAtTargetZ)
+}
+
+function getCameraDistance(cameraPosition: Vector3, cameraTarget: Vector3): number {
+  const distance = cameraPosition.distanceTo(cameraTarget)
+  return Number.isFinite(distance) && distance > 1e-6 ? distance : VRM_STAGE_DEFAULT_CAMERA_DISTANCE
+}
+
+function getSceneCameraSettingsKey(settings = PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS): string {
+  return [
+    settings.cameraFov,
+    settings.cameraNear,
+    settings.cameraFar,
+    settings.cameraPositionX,
+    settings.cameraPositionY,
+    settings.cameraPositionZ,
+    settings.cameraTargetX,
+    settings.cameraTargetY,
+    settings.cameraTargetZ,
+    settings.lookAtTargetX,
+    settings.lookAtTargetY,
+    settings.lookAtTargetZ
+  ]
+    .map(formatSceneSettingsNumber)
+    .join(':')
+}
+
+function getSceneCameraPoseSettingsKey(settings = PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS): string {
+  return [
+    settings.cameraPositionX,
+    settings.cameraPositionY,
+    settings.cameraPositionZ,
+    settings.cameraTargetX,
+    settings.cameraTargetY,
+    settings.cameraTargetZ
+  ]
+    .map(formatSceneSettingsNumber)
+    .join(':')
+}
+
+function formatSceneSettingsNumber(value: number): string {
+  return Number.isFinite(value) ? value.toFixed(4) : '0.0000'
 }
 
 function disposeSceneRuntime(runtime: SceneRuntime): void {
@@ -680,11 +785,35 @@ function disposeVrmModelRuntime(runtime: SceneRuntime, modelRuntime: VrmModelRun
 }
 
 function applySceneSettings(runtime: SceneRuntime, settings: PetVrmStageSceneSettings): void {
-  runtime.ambientLight.intensity = settings.ambientLightIntensity
-  runtime.hemisphereLight.intensity = settings.fillLightIntensity
-  runtime.directionalLight.intensity = settings.keyLightIntensity
+  const sceneSettings = normalizePetVrmStageSceneSettings(settings)
+  runtime.sceneSettings = sceneSettings
+  runtime.ambientLight.intensity = sceneSettings.ambientLightIntensity
+  runtime.hemisphereLight.intensity = sceneSettings.fillLightIntensity
+  runtime.directionalLight.intensity = sceneSettings.keyLightIntensity
   runtime.scene.background = null
   runtime.renderer.setClearColor(0x000000, 0)
+
+  const cameraSettingsKey = getSceneCameraSettingsKey(sceneSettings)
+  if (cameraSettingsKey === runtime.lastCameraSettingsKey) return
+
+  runtime.lastCameraSettingsKey = cameraSettingsKey
+  applyCameraSettings(runtime, sceneSettings)
+}
+
+function applyCameraSettings(runtime: SceneRuntime, settings: PetVrmStageSceneSettings): void {
+  const cameraPosition = getSceneSettingsCameraPosition(settings)
+  const cameraTarget = getSceneSettingsCameraTarget(settings)
+  runtime.camera.fov = settings.cameraFov
+  runtime.camera.near = settings.cameraNear
+  runtime.camera.far = settings.cameraFar
+  runtime.cameraDistance = getCameraDistance(cameraPosition, cameraTarget)
+  runtime.cameraDirection.copy(cameraPosition).sub(cameraTarget)
+  if (runtime.cameraDirection.lengthSq() <= 1e-6) {
+    runtime.cameraDirection.copy(VRM_STAGE_FALLBACK_CAMERA_DIRECTION)
+  }
+  runtime.cameraDirection.normalize()
+  runtime.modelOrigin.copy(cameraTarget)
+  runtime.gazeTarget.position.copy(getSceneSettingsLookAtTarget(settings))
   applyCameraPosition(runtime)
 }
 
@@ -708,6 +837,29 @@ function syncCameraStateFromOrbitControls(runtime: SceneRuntime): void {
   if (runtime.cameraDirection.lengthSq() <= 1e-6) return
   runtime.cameraDirection.normalize()
   runtime.cameraDistance = runtime.controls.getDistance()
+}
+
+function emitCameraSceneSettings(runtime: SceneRuntime): void {
+  if (runtime.applyingCameraState || !runtime.controls.enabled) return
+
+  const nextSettings = normalizePetVrmStageSceneSettings({
+    ...runtime.sceneSettings,
+    cameraFar: runtime.camera.far,
+    cameraFov: runtime.camera.fov,
+    cameraNear: runtime.camera.near,
+    cameraPositionX: runtime.camera.position.x,
+    cameraPositionY: runtime.camera.position.y,
+    cameraPositionZ: runtime.camera.position.z,
+    cameraTargetX: runtime.controls.target.x,
+    cameraTargetY: runtime.controls.target.y,
+    cameraTargetZ: runtime.controls.target.z
+  })
+  const nextCameraSettingsKey = getSceneCameraSettingsKey(nextSettings)
+  if (nextCameraSettingsKey === runtime.lastCameraSettingsKey) return
+
+  runtime.sceneSettings = nextSettings
+  runtime.lastCameraSettingsKey = nextCameraSettingsKey
+  runtime.onSceneSettingsChange?.(nextSettings)
 }
 
 function setOrbitControlsEnabled(runtime: SceneRuntime, enabled: boolean): void {
@@ -753,7 +905,7 @@ function applyExpression(model: PetVrmStageModel, expressionManager: LoadedPetVr
   }
 
   const expression = model.profile.expression ?? 'neutral'
-  if (expression === 'neutral') return
+  if (expression === 'neutral' && model.profile.expressionIntensity == null) return
 
   const preset = PET_VRM_EXPRESSION_PRESET_BY_NAME[expression]
   if (preset) {
@@ -915,6 +1067,7 @@ const PET_VRM_EXPRESSION_PRESETS = [
 ] as const
 
 const PET_VRM_EXPRESSION_PRESET_BY_NAME = {
+  neutral: VRMExpressionPresetName.Neutral,
   happy: VRMExpressionPresetName.Happy,
   relaxed: VRMExpressionPresetName.Relaxed,
   surprised: VRMExpressionPresetName.Surprised,

@@ -1,8 +1,8 @@
 import { usePreference } from '@data/hooks/usePreference'
 import {
   usePetSceneModePreference,
-  usePetVrmStageModelProfilesPreference,
-  usePetVrmStageSceneSettingsPreference
+  usePetVrmStageModelProfiles,
+  usePetVrmStageSceneSettings
 } from '@renderer/hooks/usePetPreferences'
 import type {
   PetMouseState,
@@ -42,7 +42,7 @@ import {
   buildPetPanelSnapshots
 } from './sprite/spriteTaskUi'
 import { getPetSpriteResizeRequest } from './sprite/spriteWindowController'
-import type { PetVrmStageModelLoadState } from './vrm/types'
+import type { PetVrmStageModelLoadState, PetVrmStageSceneSettings } from './vrm/types'
 import VrmStageScene from './vrm/VrmStageScene'
 import { getPetVrmResizeRequest } from './vrm/vrmWindowController'
 
@@ -68,12 +68,12 @@ type WindowResizeState = {
 const PET_EDGE_RESIZE_HANDLE_WIDTH = 10
 const PET_MOUSE_INTERACTION_GRACE_MS = 250
 const PET_VRM_RESIZE_FRAME_SHOW_DELAY_MS = 250
-const PET_VRM_FADE_ON_HOVER_STORAGE_KEY = 'controls-island/fade-on-hover-enabled'
 
 const PetWindowApp: FC = () => {
   const { snapshot } = usePetPresentationRuntime()
   const [dndEnabled] = usePreference('feature.pet.dnd_enabled')
   const [petScale] = usePreference('feature.pet.scale')
+  const [vrmFadeOnHoverEnabled, setVrmFadeOnHoverEnabled] = usePreference('feature.pet.vrm.fade_on_hover_enabled')
   const [stageWidth, setStageWidth] = useState(PET_PASTURE_DEFAULT_WIDTH)
   const [stageHeight, setStageHeight] = useState(PET_WINDOW_HEIGHT)
   const [windowX, setWindowX] = useState(0)
@@ -88,14 +88,13 @@ const PetWindowApp: FC = () => {
   const [mouseState, setMouseState] = useState<PetMouseState | null>(null)
   const [windowDragging, setWindowDragging] = useState(false)
   const [vrmResizeFrameVisible, setVrmResizeFrameVisible] = useState(false)
-  const [vrmFadeOnHoverEnabled, setVrmFadeOnHoverEnabled] = useState(() => getStoredVrmFadeOnHover())
   const [vrmStageFaded, setVrmStageFaded] = useState(false)
   const [vrmPointerTransparent, setVrmPointerTransparent] = useState(true)
   const [livePositions, setLivePositions] = useState<Map<string, PastureAnimalPosition>>(() => new Map())
   const [selectedTaskKey, setSelectedTaskKey] = useState<string | null>(null)
   const [sceneMode] = usePetSceneModePreference()
-  const { profiles: vrmStageModelProfiles } = usePetVrmStageModelProfilesPreference()
-  const [vrmSceneSettings] = usePetVrmStageSceneSettingsPreference()
+  const { profiles: vrmStageModelProfiles } = usePetVrmStageModelProfiles()
+  const [vrmSceneSettings, setVrmSceneSettings] = usePetVrmStageSceneSettings()
   const [vrmModelLoadStates, setVrmModelLoadStates] = useState<Map<string, PetVrmStageModelLoadState>>(() => new Map())
   const sceneModeRef = useRef(sceneMode)
   sceneModeRef.current = sceneMode
@@ -312,10 +311,19 @@ const PetWindowApp: FC = () => {
   const handleVrmHitTestTransparencyChange = useCallback((transparent: boolean) => {
     setVrmPointerTransparent(transparent)
   }, [])
-  const handleVrmFadeOnHoverChange = useCallback((enabled: boolean) => {
-    setVrmFadeOnHoverEnabled(enabled)
-    if (!enabled) setVrmStageFaded(false)
-  }, [])
+  const handleVrmFadeOnHoverChange = useCallback(
+    (enabled: boolean) => {
+      void setVrmFadeOnHoverEnabled(enabled)
+      if (!enabled) setVrmStageFaded(false)
+    },
+    [setVrmFadeOnHoverEnabled]
+  )
+  const handleVrmSceneSettingsChange = useCallback(
+    (settings: PetVrmStageSceneSettings) => {
+      void setVrmSceneSettings(settings)
+    },
+    [setVrmSceneSettings]
+  )
 
   const movePendingWindow = useCallback(() => {
     const drag = dragRef.current
@@ -661,6 +669,7 @@ const PetWindowApp: FC = () => {
           onResizePointerDown={handleResizePointerDown}
           onResizePointerMove={handleResizePointerMove}
           onResizePointerUp={finishWindowResize}
+          onSceneSettingsChange={handleVrmSceneSettingsChange}
           resizeFrameVisible={vrmResizeFrameVisible}
           sceneSettings={vrmSceneSettings}
           stageFaded={vrmStageFaded}
@@ -811,14 +820,6 @@ function getFirstPositiveFiniteNumber(...values: Array<number | undefined>): num
     if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value
   }
   return 1
-}
-
-function getStoredVrmFadeOnHover(): boolean {
-  try {
-    return window.localStorage.getItem(PET_VRM_FADE_ON_HOVER_STORAGE_KEY) === 'true'
-  } catch {
-    return false
-  }
 }
 
 export function isPetHitTarget(target: EventTarget | null): boolean {

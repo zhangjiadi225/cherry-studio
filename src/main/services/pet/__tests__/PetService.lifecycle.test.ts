@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { BaseService } from '../../../core/lifecycle/BaseService'
 import { PetService } from '../PetService'
+import { createDefaultPetState, type StoredPetState } from '../PetStateStore'
 
 const aiStreamManagerMock = vi.hoisted(() => ({
   addListener: vi.fn(() => true),
@@ -100,13 +101,10 @@ describe('PetService platform boundary', () => {
     const service = createService()
     const animals = [createAnimal('animal-a')]
     petPackageStoreMock.listImportedPetPackages.mockResolvedValue([{ displayName: 'Test Pet', id: 'test-pet' }])
-    vi.spyOn(service as unknown as { getAnimals: () => Promise<PetAnimalInstance[]> }, 'getAnimals').mockResolvedValue(
+    vi.spyOn(service as unknown as { getPetState: () => Promise<StoredPetState> }, 'getPetState').mockResolvedValue({
+      ...createDefaultPetState(),
       animals
-    )
-    vi.spyOn(
-      service as unknown as { getPasturePreferenceBounds: () => { x: number; y: number; width: number } },
-      'getPasturePreferenceBounds'
-    ).mockReturnValue({ x: -1, y: -1, width: 640 })
+    })
 
     const snapshot = await service.getPastureSnapshot()
 
@@ -256,6 +254,15 @@ describe('PetService platform boundary', () => {
 
 function createService(): PetService {
   const service = new PetService()
+  const state = createDefaultPetState()
+  Object.assign(service as unknown as { stateCache: StoredPetState; stateLoaded: boolean; stateStore: unknown }, {
+    stateCache: state,
+    stateLoaded: true,
+    stateStore: {
+      read: vi.fn(async () => state),
+      write: vi.fn(async (nextState: StoredPetState) => nextState)
+    }
+  })
   vi.spyOn(
     service as unknown as { broadcastPastureChanged: () => Promise<void> },
     'broadcastPastureChanged'

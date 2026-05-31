@@ -14,8 +14,7 @@ await preferenceService.preload([
   'feature.pet.dnd_enabled',
   'feature.pet.mode',
   'feature.pet.scale',
-  'feature.pet.vrm.model_profiles',
-  'feature.pet.vrm.scene_settings'
+  'feature.pet.vrm.fade_on_hover_enabled'
 ])
 
 const root = createRoot(document.getElementById('root') as HTMLElement)

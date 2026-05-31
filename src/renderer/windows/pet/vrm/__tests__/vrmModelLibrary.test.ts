@@ -1,3 +1,4 @@
+import { PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS } from '@shared/pet'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -141,13 +142,26 @@ describe('vrm stage model profiles', () => {
     expect(
       normalizePetVrmStageSceneSettings({
         ambientLightIntensity: 999,
+        cameraFar: 0,
+        cameraFov: 120,
+        cameraNear: 20,
+        cameraPositionX: 2000,
+        cameraTargetZ: -2000,
         fillLightIntensity: 8,
-        keyLightIntensity: 3.4
+        keyLightIntensity: 3.4,
+        lookAtTargetZ: -2000
       })
     ).toEqual({
+      ...PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS,
       ambientLightIntensity: 6,
+      cameraFar: 11,
+      cameraFov: 90,
+      cameraNear: 10,
+      cameraPositionX: 1000,
+      cameraTargetZ: -1000,
       fillLightIntensity: 6,
-      keyLightIntensity: 3.4
+      keyLightIntensity: 3.4,
+      lookAtTargetZ: -1000
     })
   })
 })

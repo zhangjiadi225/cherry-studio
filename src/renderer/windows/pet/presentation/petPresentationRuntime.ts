@@ -1,6 +1,7 @@
 import type { AgentPresentationEvent } from '@shared/ai/agentPresentationEvents'
 import {
   PET_PASTURE_DEFAULT_WIDTH,
+  PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS,
   type PetAnimalInstance,
   type PetPackageInfo,
   type PetPastureBounds,
@@ -26,7 +27,9 @@ export const EMPTY_PET_PASTURE_SNAPSHOT: PetPastureSnapshot = {
     x: -1,
     y: -1,
     width: PET_PASTURE_DEFAULT_WIDTH
-  }
+  },
+  vrmModelProfiles: {},
+  vrmSceneSettings: PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS
 }
 
 export type PetPresentationTaskStage = 'active' | 'bubble' | 'queued'

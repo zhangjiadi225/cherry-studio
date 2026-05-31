@@ -1,3 +1,4 @@
+import { PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS } from '@shared/pet'
 import { act, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -439,6 +440,39 @@ describe('VrmPastureScene', () => {
     unmount()
   })
 
+  it('applies VRM scene JSON settings to the perspective camera', () => {
+    const { unmount } = render(
+      <VrmPastureScene
+        models={[]}
+        sceneSettings={{
+          ...PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS,
+          cameraFar: 1200,
+          cameraFov: 55,
+          cameraNear: 0.2,
+          cameraPositionX: 1,
+          cameraPositionY: 2,
+          cameraPositionZ: -3,
+          cameraTargetX: 0.25,
+          cameraTargetY: 0.5,
+          cameraTargetZ: -0.75
+        }}
+        stageHeight={640}
+        stageWidth={420}
+      />
+    )
+
+    const camera = threeMocks.cameras.at(-1)
+    expect(camera).toMatchObject({
+      far: 1200,
+      fov: 55,
+      near: 0.2
+    })
+    expect(camera?.position).toMatchObject({ x: 1, y: 2, z: -3 })
+    expect(camera?.lookAt).toHaveBeenCalledWith(expect.objectContaining({ x: 0.25, y: 0.5, z: -0.75 }))
+
+    unmount()
+  })
+
   it('checks render-target alpha within the the stage circular hit region', () => {
     const read: RenderTargetRegionRead = {
       centerX: 1,
@@ -520,6 +554,8 @@ describe('VrmPastureScene', () => {
               animationPreset: 'vroid-greeting',
               createdAt: 1,
               enabled: true,
+              expression: 'neutral',
+              expressionIntensity: 0.35,
               modelId: 'model-a',
               order: 0,
               positionX,
@@ -557,6 +593,7 @@ describe('VrmPastureScene', () => {
     expect(root.position.y).toBeCloseTo(0.25)
     expect(root.position.z).toBeCloseTo(-0.1)
     expect(mixer?.update).toHaveBeenCalledWith(0.016)
+    expect(vrm.expressionManager.setValue).toHaveBeenCalledWith('neutral', 0.35)
     expect(vrm.update).toHaveBeenCalledWith(0.016)
 
     rerender(renderModel(0.5, -0.2, 0.15))
@@ -570,5 +607,104 @@ describe('VrmPastureScene', () => {
     expect(root.position.x).toBeCloseTo(0.5)
     expect(root.position.y).toBeCloseTo(-0.2)
     expect(root.position.z).toBeCloseTo(0.15)
+  })
+
+  it('keeps the first ready model camera bootstrap stable when its animation preset changes', async () => {
+    const { Object3D } = await import('three')
+    const root = new Object3D()
+    const scene = new Object3D()
+    const vrm = {
+      expressionManager: {
+        setValue: vi.fn()
+      },
+      humanoid: {
+        getNormalizedBoneNode: vi.fn(() => null)
+      },
+      lookAt: {
+        reset: vi.fn(),
+        target: undefined,
+        update: vi.fn()
+      },
+      scene,
+      update: vi.fn()
+    }
+    vi.mocked(createPetVrmModelObjectUrl).mockResolvedValue({
+      record: {
+        id: 'model-a',
+        importedAt: 1,
+        lastModified: 1,
+        name: 'Model A',
+        size: 1,
+        sourceUrl: 'blob:model',
+        type: 'model/vrm',
+        updatedAt: 1
+      },
+      revoke: vi.fn(),
+      url: 'blob:model'
+    })
+    vi.mocked(loadPetVrmModel).mockResolvedValue({
+      height: 1,
+      root,
+      vrm,
+      width: 1
+    } as never)
+
+    const renderModel = (animationPreset: 'vroid-greeting' | 'vroid-spin') => (
+      <VrmPastureScene
+        models={[
+          {
+            enabled: true,
+            id: 'stage-model',
+            modelId: 'model-a',
+            order: 0,
+            positionX: 0,
+            positionY: 0,
+            positionZ: 0,
+            profile: {
+              animationPreset,
+              createdAt: 1,
+              enabled: true,
+              modelId: 'model-a',
+              order: 0,
+              positionX: 0,
+              positionY: 0,
+              positionZ: 0,
+              updatedAt: 1
+            }
+          }
+        ]}
+        stageHeight={640}
+        stageWidth={420}
+      />
+    )
+
+    const { rerender } = render(renderModel('vroid-greeting'))
+
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    act(() => {
+      vi.mocked(window.requestAnimationFrame).mock.calls.at(-1)?.[0](16)
+    })
+
+    const camera = threeMocks.cameras.at(-1)
+    expect(camera).toBeTruthy()
+    const lookAt = camera?.lookAt as ReturnType<typeof vi.fn>
+    const lookAtCallCountAfterBootstrap = lookAt.mock.calls.length
+
+    rerender(renderModel('vroid-spin'))
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    act(() => {
+      vi.mocked(window.requestAnimationFrame).mock.calls.at(-1)?.[0](32)
+    })
+
+    expect(loadPetVrmModel).toHaveBeenCalledTimes(1)
+    expect(threeMocks.animationMixers).toHaveLength(2)
+    expect(lookAt).toHaveBeenCalledTimes(lookAtCallCountAfterBootstrap)
   })
 })

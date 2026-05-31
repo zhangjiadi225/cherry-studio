@@ -17,8 +17,8 @@ import { useTheme } from '@renderer/context/ThemeProvider'
 import { useAgents } from '@renderer/hooks/agents/useAgent'
 import {
   usePetSceneModePreference,
-  usePetVrmStageModelProfilesPreference,
-  usePetVrmStageSceneSettingsPreference
+  usePetVrmStageModelProfiles,
+  usePetVrmStageSceneSettings
 } from '@renderer/hooks/usePetPreferences'
 import { cn } from '@renderer/utils/style'
 import SpriteAnimator from '@renderer/windows/pet/sprite/SpriteAnimator'
@@ -113,21 +113,20 @@ const PetSettings: FC = () => {
   const [enabled, setEnabled] = usePreference('feature.pet.enabled')
   const [pinOnTop, setPinOnTop] = usePreference('feature.pet.pin_on_top')
   const [dndEnabled, setDndEnabled] = usePreference('feature.pet.dnd_enabled')
-  const [pastureBounds, setPastureBounds] = usePreference('feature.pet.pasture_bounds')
   const [petScale, setPetScale] = usePreference('feature.pet.scale')
-  const effectivePastureBounds = pastureBounds ?? DEFAULT_PASTURE_BOUNDS
+  const [snapshot, setSnapshot] = useState<PetPastureSnapshot | null>(null)
+  const effectivePastureBounds = snapshot?.bounds ?? DEFAULT_PASTURE_BOUNDS
   const effectivePetScale = typeof petScale === 'number' ? petScale : PET_DEFAULT_SCALE
   const [widthDraft, setWidthDraft] = useState(() => clampPastureWidth(effectivePastureBounds.width))
   const [scaleDraft, setScaleDraft] = useState(() => petScaleToPercent(effectivePetScale))
-  const [snapshot, setSnapshot] = useState<PetPastureSnapshot | null>(null)
   const [sceneMode, setSceneMode] = usePetSceneModePreference()
   const [vrmModels, setVrmModels] = useState<PetVrmModelSummary[]>([])
   const {
     deleteProfile: deleteVrmStageModelProfile,
     profiles: vrmStageModelProfiles,
     saveProfile: saveVrmStageModelProfile
-  } = usePetVrmStageModelProfilesPreference()
-  const [vrmSceneSettings, setVrmSceneSettings] = usePetVrmStageSceneSettingsPreference()
+  } = usePetVrmStageModelProfiles()
+  const [vrmSceneSettings, setVrmSceneSettings] = usePetVrmStageSceneSettings()
   const vrmFileInputRef = useRef<HTMLInputElement | null>(null)
   const { agents } = useAgents()
 
@@ -189,7 +188,6 @@ const PetSettings: FC = () => {
   const handleWidthCommit = async ([nextWidth = PET_PASTURE_DEFAULT_WIDTH]: number[]) => {
     const width = clampPastureWidth(nextWidth)
     setWidthDraft(width)
-    await setPastureBounds({ ...effectivePastureBounds, width })
     await window.api.pet.resizePasture(width)
   }
 

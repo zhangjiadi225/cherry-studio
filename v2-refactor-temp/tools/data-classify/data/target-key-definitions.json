@@ -216,20 +216,6 @@
       "description": "Selected desktop pet renderer mode"
     },
     {
-      "targetKey": "feature.pet.animals",
-      "type": "PreferenceTypes.PetAnimalInstance[]",
-      "defaultValue": "VALUE: []",
-      "status": "classified",
-      "description": "Desktop pasture animal instances"
-    },
-    {
-      "targetKey": "feature.pet.pasture_bounds",
-      "type": "PreferenceTypes.PetPastureBounds",
-      "defaultValue": "VALUE: { width: 640, x: -1, y: -1 }",
-      "status": "classified",
-      "description": "Desktop pasture window position and width"
-    },
-    {
       "targetKey": "feature.pet.scale",
       "type": "number",
       "defaultValue": 0.42,
@@ -237,29 +223,11 @@
       "description": "Desktop pet render scale"
     },
     {
-      "targetKey": "feature.pet.vrm.model_profiles",
-      "type": "PreferenceTypes.PetVrmStageModelProfileRecord",
-      "defaultValue": "VALUE: {} as PreferenceTypes.PetVrmStageModelProfileRecord",
+      "targetKey": "feature.pet.vrm.fade_on_hover_enabled",
+      "type": "boolean",
+      "defaultValue": false,
       "status": "classified",
-      "description": "VRM stage model display profiles"
-    },
-    {
-      "targetKey": "feature.pet.vrm.scene_settings",
-      "type": "PreferenceTypes.PetVrmStageSceneSettings",
-      "defaultValue": {
-        "ambientLightIntensity": 2.2,
-        "fillLightIntensity": 1.2,
-        "keyLightIntensity": 2.8
-      },
-      "status": "classified",
-      "description": "VRM stage light settings"
-    },
-    {
-      "targetKey": "feature.pet.vrm.window_bounds",
-      "type": "PreferenceTypes.PetVrmWindowBounds",
-      "defaultValue": "VALUE: { height: 720, width: 360, x: -1, y: -1 }",
-      "status": "classified",
-      "description": "VRM stage window position and size"
+      "description": "Fade the VRM stage while pointer hover pass-through is enabled"
     },
     {
       "targetKey": "feature.translate.action.preferred_lang",

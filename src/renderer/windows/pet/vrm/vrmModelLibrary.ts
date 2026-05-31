@@ -1,11 +1,10 @@
 import {
-  PET_VRM_STAGE_ANIMATION_PRESETS,
-  PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS,
-  PET_VRM_STAGE_EXPRESSION_NAMES,
+  createPetVrmStageModelProfile,
+  normalizePetVrmStageModelProfile,
+  normalizePetVrmStageSceneSettings,
   type PetAssetImportRemoteRequest,
   type PetAssetInfo,
-  type PetVrmStageModelProfileRecord,
-  type PetVrmStageSceneSettings
+  type PetVrmStageModelProfileRecord
 } from '@shared/pet'
 
 import type {
@@ -20,43 +19,12 @@ const PET_VRM_BROADCAST_CHANNEL = 'cherry.pet.vrm.library.v1'
 
 let broadcastChannel: BroadcastChannel | null | undefined
 
+export { createPetVrmStageModelProfile, normalizePetVrmStageModelProfile, normalizePetVrmStageSceneSettings }
+
 export function isPetVrmStageModelEnabled(
   profile: PetVrmStageModelProfile | undefined | null
 ): profile is PetVrmStageModelProfile {
   return Boolean(profile?.enabled && profile.modelId)
-}
-
-export function createPetVrmStageModelProfile(
-  input: Partial<PetVrmStageModelProfile> = {},
-  previous?: PetVrmStageModelProfile
-): PetVrmStageModelProfile {
-  const now = Date.now()
-  const modelId = normalizeOptionalString('modelId' in input ? input.modelId : previous?.modelId)
-  if (!modelId) throw new Error('VRM model id is required')
-
-  return {
-    createdAt: Number.isFinite(input.createdAt) ? Number(input.createdAt) : (previous?.createdAt ?? now),
-    animationPreset: normalizeAnimationPreset(input.animationPreset ?? previous?.animationPreset),
-    blink: typeof input.blink === 'boolean' ? input.blink : (previous?.blink ?? true),
-    enabled: typeof input.enabled === 'boolean' ? input.enabled : (previous?.enabled ?? false),
-    expression: normalizeExpressionName(input.expression ?? previous?.expression),
-    expressionIntensity: normalizeOptionalClampedNumber(
-      input.expressionIntensity ?? previous?.expressionIntensity,
-      0,
-      1
-    ),
-    idleMotion: typeof input.idleMotion === 'boolean' ? input.idleMotion : (previous?.idleMotion ?? true),
-    lookAtCursor: typeof input.lookAtCursor === 'boolean' ? input.lookAtCursor : (previous?.lookAtCursor ?? true),
-    modelId,
-    order: Number.isFinite(input.order) ? Number(input.order) : (previous?.order ?? 0),
-    positionX: normalizeCoordinate(input.positionX ?? previous?.positionX, 0),
-    positionY: normalizeCoordinate(input.positionY ?? previous?.positionY, 0),
-    positionZ: normalizeCoordinate(
-      input.positionZ ?? previous?.positionZ,
-      getDefaultVrmStageModelPositionZ(input.order ?? previous?.order ?? 0)
-    ),
-    updatedAt: Number.isFinite(input.updatedAt) ? Number(input.updatedAt) : now
-  }
 }
 
 export function subscribePetVrmLibraryChanges(listener: () => void): () => void {
@@ -163,16 +131,6 @@ export async function createPetVrmModelObjectUrl(
   }
 }
 
-export function normalizePetVrmStageModelProfile(
-  key: string,
-  profile: Partial<PetVrmStageModelProfile> | undefined | null
-): PetVrmStageModelProfile | null {
-  if (!profile || typeof profile !== 'object') return null
-  const modelId = normalizeOptionalString(profile.modelId) ?? normalizeOptionalString(key)
-  if (!modelId) return null
-  return createPetVrmStageModelProfile({ ...profile, modelId })
-}
-
 export function petVrmStageModelProfilesFromRecord(
   record: Partial<PetVrmStageModelProfileRecord> | undefined | null
 ): PetVrmStageModelProfileMap {
@@ -195,31 +153,6 @@ export function petVrmStageModelProfilesToRecord(profiles: PetVrmStageModelProfi
     record[profile.modelId] = profile
   }
   return record
-}
-
-export function normalizePetVrmStageSceneSettings(input: unknown): PetVrmStageSceneSettings {
-  const record = input && typeof input === 'object' ? (input as Partial<PetVrmStageSceneSettings>) : {}
-
-  return {
-    ambientLightIntensity: normalizeClampedNumber(
-      record.ambientLightIntensity,
-      0,
-      6,
-      PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS.ambientLightIntensity
-    ),
-    fillLightIntensity: normalizeClampedNumber(
-      record.fillLightIntensity,
-      0,
-      6,
-      PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS.fillLightIntensity
-    ),
-    keyLightIntensity: normalizeClampedNumber(
-      record.keyLightIntensity,
-      0,
-      6,
-      PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS.keyLightIntensity
-    )
-  }
 }
 
 function validatePetVrmFile(file: File): void {
@@ -258,42 +191,6 @@ function getPetAssetApi(): Window['api']['pet']['assets'] | null {
 
 function stripVrmExtension(name: string): string {
   return name.replace(/\.vrm$/i, '')
-}
-
-function normalizeOptionalString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined
-}
-
-function normalizeOptionalClampedNumber(value: unknown, min: number, max: number): number | undefined {
-  if (!Number.isFinite(value)) return undefined
-  return Math.min(Math.max(Number(value), min), max)
-}
-
-function normalizeClampedNumber(value: unknown, min: number, max: number, fallback: number): number {
-  const finiteValue = Number.isFinite(value) ? Number(value) : fallback
-  return Math.min(Math.max(finiteValue, min), max)
-}
-
-function normalizeCoordinate(value: unknown, fallback: number): number {
-  const finiteValue = Number.isFinite(value) ? Number(value) : fallback
-  return Math.min(Math.max(finiteValue, -2), 2)
-}
-
-function getDefaultVrmStageModelPositionZ(order: unknown): number {
-  const finiteOrder = Number.isFinite(order) ? Math.max(0, Number(order)) : 0
-  return Number((-finiteOrder * 0.02).toFixed(2))
-}
-
-function normalizeAnimationPreset(value: unknown): PetVrmStageModelProfile['animationPreset'] {
-  return typeof value === 'string' && (PET_VRM_STAGE_ANIMATION_PRESETS as readonly string[]).includes(value)
-    ? (value as PetVrmStageModelProfile['animationPreset'])
-    : 'vroid-show-full-body'
-}
-
-function normalizeExpressionName(value: unknown): PetVrmStageModelProfile['expression'] {
-  return typeof value === 'string' && (PET_VRM_STAGE_EXPRESSION_NAMES as readonly string[]).includes(value)
-    ? (value as PetVrmStageModelProfile['expression'])
-    : 'neutral'
 }
 
 function getBroadcastChannel(): BroadcastChannel | null {

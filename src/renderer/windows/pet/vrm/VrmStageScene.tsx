@@ -33,6 +33,7 @@ type VrmStageSceneProps = {
   onResizePointerDown: (event: PointerEvent<HTMLDivElement>, edge: PetWindowResizeEdge) => void
   onResizePointerMove: (event: PointerEvent<HTMLDivElement>) => void
   onResizePointerUp: (event: PointerEvent<HTMLDivElement>) => void
+  onSceneSettingsChange?: (settings: PetVrmStageSceneSettings) => void
   resizeFrameVisible?: boolean
   sceneSettings?: PetVrmStageSceneSettings
   stageFaded?: boolean
@@ -53,6 +54,7 @@ export default function VrmStageScene({
   onResizePointerDown,
   onResizePointerMove,
   onResizePointerUp,
+  onSceneSettingsChange,
   resizeFrameVisible = false,
   sceneSettings = PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS,
   stageFaded = false,
@@ -83,6 +85,7 @@ export default function VrmStageScene({
           models={models}
           onHitTestTransparencyChange={onHitTestTransparencyChange}
           onModelLoadStateChange={onModelLoadStateChange}
+          onSceneSettingsChange={onSceneSettingsChange}
           sceneSettings={sceneSettings}
           stageHeight={stageHeight}
           stageWidth={stageWidth}
@@ -220,7 +223,7 @@ function PetVrmControlsIsland({
 }) {
   const [expanded, setExpanded] = useState(false)
   const [pinned, setPinned] = useState(true)
-  const [localFadeOnHover, setLocalFadeOnHover] = useState(() => getStoredFadeOnHover())
+  const [localFadeOnHover, setLocalFadeOnHover] = useState(false)
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
   const fadeOnHover = fadeOnHoverEnabled ?? localFadeOnHover
 
@@ -240,7 +243,6 @@ function PetVrmControlsIsland({
   const toggleFadeOnHover = useCallback(() => {
     const next = !fadeOnHover
     setLocalFadeOnHover(next)
-    window.localStorage.setItem(PET_VRM_FADE_ON_HOVER_STORAGE_KEY, next ? 'true' : 'false')
     onFadeOnHoverChange?.(next)
   }, [fadeOnHover, onFadeOnHoverChange])
 
@@ -498,15 +500,5 @@ function getPetVrmResizeHandleStyle(edge: PetWindowResizeEdge): Record<string, n
       return { cursor: 'nesw-resize', height: cornerSize, right: 0, top: 0, width: cornerSize }
     case 'bottom-left':
       return { bottom: 0, cursor: 'nesw-resize', height: cornerSize, left: 0, width: cornerSize }
-  }
-}
-
-const PET_VRM_FADE_ON_HOVER_STORAGE_KEY = 'controls-island/fade-on-hover-enabled'
-
-function getStoredFadeOnHover(): boolean {
-  try {
-    return window.localStorage.getItem(PET_VRM_FADE_ON_HOVER_STORAGE_KEY) === 'true'
-  } catch {
-    return false
   }
 }

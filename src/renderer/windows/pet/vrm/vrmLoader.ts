@@ -3,7 +3,11 @@ import type { LoadingManager } from 'three'
 import { Box3, Group, Mesh, Object3D, Quaternion, Vector3 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
+import type { PetVrmRootPositionAnchor } from './vrmAnimation'
+
 export type LoadedPetVrm = {
+  animationAnchor?: PetVrmRootPositionAnchor
+  groundOffsetY: number
   height: number
   root: Group
   vrm: VRM
@@ -28,12 +32,16 @@ export async function loadPetVrmModel(
   const root = new Group()
   root.add(vrm.scene)
   rotateVrmGroupToFaceCamera(root, vrm)
+  const groundOffsetY = groundVrmSceneAtRootOrigin(root, vrm.scene)
+  const animationAnchor = createVrmRootPositionAnchor(vrm)
   vrm.springBoneManager?.reset()
 
   const bounds = computeVrmModelBounds(root)
   const size = bounds.getSize(new Vector3())
 
   return {
+    animationAnchor,
+    groundOffsetY,
     height: Math.max(size.y, 1),
     root,
     vrm,
@@ -54,6 +62,28 @@ function rotateVrmGroupToFaceCamera(root: Group, vrm: VRM): void {
   const quaternion = new Quaternion().setFromUnitVectors(facingDirection.normalize(), targetDirection.normalize())
   root.quaternion.premultiply(quaternion)
   root.updateMatrixWorld(true)
+}
+
+function groundVrmSceneAtRootOrigin(root: Object3D, scene: Object3D): number {
+  const bounds = computeVrmModelBounds(root)
+  if (!Number.isFinite(bounds.min.y)) return 0
+
+  const offsetY = -bounds.min.y
+  if (Math.abs(offsetY) <= 1e-6) return 0
+
+  scene.position.y += offsetY
+  root.updateMatrixWorld(true)
+  return offsetY
+}
+
+function createVrmRootPositionAnchor(vrm: VRM): PetVrmRootPositionAnchor | undefined {
+  const hipNode = vrm.humanoid?.getNormalizedBoneNode('hips')
+  if (!hipNode?.name) return undefined
+
+  return {
+    nodeName: hipNode.name,
+    position: hipNode.position.clone()
+  }
 }
 
 function computeVrmModelBounds(root: Object3D): Box3 {

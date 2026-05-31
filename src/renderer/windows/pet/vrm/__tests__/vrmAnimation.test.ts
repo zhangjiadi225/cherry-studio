@@ -39,6 +39,26 @@ describe('vrmAnimation', () => {
     expect(Array.from(headTrack.values)).toEqual([7, 7, 7])
   })
 
+  it('re-anchors position tracks from a cached rest hips position', () => {
+    const hipNode = new Object3D()
+    hipNode.name = 'hips'
+    hipNode.position.set(50, 60, 70)
+    const hipsTrack = new VectorKeyframeTrack('hips.position', [0, 1], [4, 6, 8, 5, 7, 9])
+    const clip = new AnimationClip('idle', 1, [hipsTrack])
+    const vrm = {
+      humanoid: {
+        getNormalizedBoneNode: vi.fn(() => hipNode)
+      }
+    }
+
+    reAnchorRootPositionTrack(clip, vrm as never, {
+      nodeName: 'hips',
+      position: new Vector3(1, 2, 3)
+    })
+
+    expect(Array.from(hipsTrack.values)).toEqual([1, 2, 3, 2, 3, 4])
+  })
+
   it('uses pet VRM blink timing and sine weight', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0)
     const runtime = createPetVrmBlinkRuntime()

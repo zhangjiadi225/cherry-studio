@@ -1,11 +1,12 @@
 import type { AgentPresentationEvent } from '@shared/ai/agentPresentationEvents'
-import type {
-  PetAnimalInstance,
-  PetPackageInfo,
-  PetPastureSnapshot,
-  PetPermissionPromptSnapshot,
-  PetTaskBinding,
-  PetTaskBubbleSnapshot
+import {
+  PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS,
+  type PetAnimalInstance,
+  type PetPackageInfo,
+  type PetPastureSnapshot,
+  type PetPermissionPromptSnapshot,
+  type PetTaskBinding,
+  type PetTaskBubbleSnapshot
 } from '@shared/pet'
 import { describe, expect, it } from 'vitest'
 
@@ -255,6 +256,8 @@ function createSnapshot(overrides: Partial<PetPastureSnapshot> = {}): PetPasture
     packages: [],
     permissionPrompts: [],
     queuedTasks: [],
+    vrmModelProfiles: {},
+    vrmSceneSettings: { ...PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS },
     ...overrides
   }
 }

@@ -1,6 +1,11 @@
 import '@testing-library/jest-dom/vitest'
 
 import type * as CherryStudioUi from '@cherrystudio/ui'
+import {
+  PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS,
+  type PetPastureSnapshot,
+  type PetVrmStageSceneSettings
+} from '@shared/pet'
 import { MockUsePreference, MockUsePreferenceUtils } from '@test-mocks/renderer/usePreference'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -11,6 +16,10 @@ import { createPetVrmStageModelProfile } from '../../../windows/pet/vrm/vrmModel
 import PetSettings from '../PetSettings'
 
 const spriteAnimatorMock = vi.hoisted(() => vi.fn(() => <div data-testid="sprite-animator" />))
+let petVrmStageConfig: {
+  modelProfiles: Record<string, ReturnType<typeof createPetVrmStageModelProfile>>
+  sceneSettings: PetVrmStageSceneSettings
+}
 
 vi.mock('react-i18next', async (importOriginal) => {
   const actual = await importOriginal<typeof ReactI18next>()
@@ -139,8 +148,11 @@ describe('PetSettings', () => {
   beforeEach(() => {
     spriteAnimatorMock.mockClear()
     vi.clearAllMocks()
-    window.localStorage.clear()
     MockUsePreferenceUtils.resetMocks()
+    petVrmStageConfig = {
+      modelProfiles: {},
+      sceneSettings: { ...PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS }
+    }
     Object.assign(window, {
       api: {
         ...window.api,
@@ -153,6 +165,20 @@ describe('PetSettings', () => {
           selectAndImportPackage: vi.fn(),
           selectPackage: vi.fn(),
           setPin: vi.fn(),
+          vrm: {
+            deleteStageModelProfile: vi.fn(async (modelId: string) => {
+              delete petVrmStageConfig.modelProfiles[modelId]
+            }),
+            getStageConfig: vi.fn(async () => petVrmStageConfig),
+            setStageModelProfile: vi.fn(async (profile: ReturnType<typeof createPetVrmStageModelProfile>) => {
+              petVrmStageConfig.modelProfiles[profile.modelId] = profile
+              return profile
+            }),
+            setStageSceneSettings: vi.fn(async (settings: typeof petVrmStageConfig.sceneSettings) => {
+              petVrmStageConfig.sceneSettings = settings
+              return settings
+            })
+          },
           show: vi.fn(),
           assets: {
             list: vi.fn(async () => [
@@ -226,9 +252,9 @@ describe('PetSettings', () => {
       order: 0
     })
     MockUsePreferenceUtils.setPreferenceValue('feature.pet.mode', 'vrm-stage')
-    MockUsePreferenceUtils.setPreferenceValue('feature.pet.vrm.model_profiles', {
+    petVrmStageConfig.modelProfiles = {
       [profile.modelId]: profile
-    })
+    }
 
     render(<PetSettings />)
 
@@ -253,8 +279,10 @@ describe('PetSettings', () => {
   })
 
   it('updates desktop window width and pet size from sliders', async () => {
-    MockUsePreferenceUtils.setPreferenceValue('feature.pet.pasture_bounds', { x: 12, y: 34, width: 640 })
     MockUsePreferenceUtils.setPreferenceValue('feature.pet.scale', 0.42)
+    vi.mocked(window.api.pet.getPastureSnapshot).mockResolvedValue(
+      createSnapshot({ bounds: { x: 12, y: 34, width: 640 } })
+    )
 
     render(<PetSettings />)
 
@@ -268,11 +296,6 @@ describe('PetSettings', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'slider-commit-720' })[0])
 
     await waitFor(() => {
-      expect(MockUsePreferenceUtils.getPreferenceValue('feature.pet.pasture_bounds')).toEqual({
-        x: 12,
-        y: 34,
-        width: 720
-      })
       expect(window.api.pet.resizePasture).toHaveBeenCalledWith(720)
     })
 
@@ -291,9 +314,9 @@ describe('PetSettings', () => {
       order: 0
     })
     MockUsePreferenceUtils.setPreferenceValue('feature.pet.mode', 'vrm-stage')
-    MockUsePreferenceUtils.setPreferenceValue('feature.pet.vrm.model_profiles', {
+    petVrmStageConfig.modelProfiles = {
       [profile.modelId]: profile
-    })
+    }
 
     render(<PetSettings />)
 
@@ -303,7 +326,7 @@ describe('PetSettings', () => {
     fireEvent.change(positionXInput, { target: { value: '1.25' } })
 
     await waitFor(() => {
-      expect(MockUsePreferenceUtils.getPreferenceValue('feature.pet.vrm.model_profiles')).toMatchObject({
+      expect(petVrmStageConfig.modelProfiles).toMatchObject({
         'model-a': {
           positionX: 1.25
         }
@@ -313,7 +336,7 @@ describe('PetSettings', () => {
     fireEvent.change(positionZInput, { target: { value: '-0.4' } })
 
     await waitFor(() => {
-      expect(MockUsePreferenceUtils.getPreferenceValue('feature.pet.vrm.model_profiles')).toMatchObject({
+      expect(petVrmStageConfig.modelProfiles).toMatchObject({
         'model-a': {
           positionZ: -0.4
         }
@@ -323,7 +346,7 @@ describe('PetSettings', () => {
     fireEvent.click(screen.getByRole('button', { name: 'select-vroid-greeting-vroid-show-full-body' }))
 
     await waitFor(() => {
-      expect(MockUsePreferenceUtils.getPreferenceValue('feature.pet.vrm.model_profiles')).toMatchObject({
+      expect(petVrmStageConfig.modelProfiles).toMatchObject({
         'model-a': {
           animationPreset: 'vroid-greeting'
         }
@@ -334,7 +357,7 @@ describe('PetSettings', () => {
     fireEvent.click(within(keyLightControl).getByRole('button', { name: 'slider-commit-max' }))
 
     await waitFor(() => {
-      expect(MockUsePreferenceUtils.getPreferenceValue('feature.pet.vrm.scene_settings')).toMatchObject({
+      expect(petVrmStageConfig.sceneSettings).toMatchObject({
         keyLightIntensity: 6
       })
     })
@@ -342,7 +365,7 @@ describe('PetSettings', () => {
 
   it('does not enable a VRM model when editing its 3D controls', async () => {
     MockUsePreferenceUtils.setPreferenceValue('feature.pet.mode', 'vrm-stage')
-    MockUsePreferenceUtils.setPreferenceValue('feature.pet.vrm.model_profiles', {})
+    petVrmStageConfig.modelProfiles = {}
 
     render(<PetSettings />)
 
@@ -351,7 +374,7 @@ describe('PetSettings', () => {
     fireEvent.change(positionXInput, { target: { value: '1.25' } })
 
     await waitFor(() => {
-      expect(MockUsePreferenceUtils.getPreferenceValue('feature.pet.vrm.model_profiles')).toMatchObject({
+      expect(petVrmStageConfig.modelProfiles).toMatchObject({
         'model-a': {
           enabled: false,
           positionX: 1.25
@@ -361,7 +384,7 @@ describe('PetSettings', () => {
   })
 })
 
-function createSnapshot() {
+function createSnapshot(overrides: Partial<PetPastureSnapshot> = {}): PetPastureSnapshot {
   return {
     animals: [
       {
@@ -403,6 +426,9 @@ function createSnapshot() {
       }
     ],
     permissionPrompts: [],
-    queuedTasks: []
+    queuedTasks: [],
+    vrmModelProfiles: petVrmStageConfig.modelProfiles,
+    vrmSceneSettings: petVrmStageConfig.sceneSettings,
+    ...overrides
   }
 }

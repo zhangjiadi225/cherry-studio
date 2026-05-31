@@ -28,14 +28,6 @@ export const mockPreferenceDefaults: Record<string, any> = {
   'feature.web_search': true,
   'feature.reasoning': false,
   'feature.tool_calling': true,
-  'feature.pet.vrm.scene_settings': {
-    ambientLightIntensity: 2.2,
-    backgroundColor: '#101820',
-    backgroundMode: 'transparent',
-    cameraZoom: 1,
-    fillLightIntensity: 1.2,
-    keyLightIntensity: 2.8
-  },
 
   // User preferences
   'user.name': 'MockUser',
