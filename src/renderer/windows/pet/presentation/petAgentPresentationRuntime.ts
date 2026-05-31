@@ -4,12 +4,14 @@ import type {
   PetAnimalInstance,
   PetPastureSnapshot,
   PetPermissionPromptSnapshot,
+  PetPresentationTargetKind,
   PetQueueReason,
   PetTaskBinding,
   PetTaskBubbleSnapshot,
   PetTaskMessageRender,
   PetTaskMessageSummary,
-  PetTaskStatus
+  PetTaskStatus,
+  PetVrmStageModelProfile
 } from '@shared/pet'
 
 type PetPresentationTaskIdentity = {
@@ -23,8 +25,14 @@ type PetPresentationTaskIdentity = {
   title: string
 }
 
-type AnimalAssignment = {
+type PetPresentationTarget = {
+  id: string
+  kind: PetPresentationTargetKind
+}
+
+type PetTargetAssignment = {
   animalId: string | null
+  petTargetKind?: PetPresentationTargetKind
   replacedBubbleTaskKey?: string
 }
 
@@ -93,22 +101,24 @@ function updateTaskBinding(
   const activeBinding = snapshot.bindings.find((binding) => binding.taskKey === identity.taskKey)
   const queuedBinding = snapshot.queuedTasks.find((binding) => binding.taskKey === identity.taskKey)
   const existing = activeBinding ?? queuedBinding
-  const assignedAnimalId = getAssignedSourceAnimalId(snapshot, identity)
-  const existingAnimalId = existing?.animalId || undefined
+  const assignedTarget = getAssignedSourcePetTarget(snapshot, identity)
+  const existingTarget = existing ? getTaskPetTarget(existing) : null
   const assignment =
-    existingAnimalId && canAnimalHandleSourceById(snapshot.animals, existingAnimalId, identity)
-      ? { animalId: existingAnimalId }
-      : assignAnimalId(snapshot, identity, options.preferredAnimalId ?? assignedAnimalId ?? undefined)
+    existing && existingTarget && canPetTargetHandleSource(snapshot, existingTarget, identity)
+      ? { animalId: existing.animalId, petTargetKind: existingTarget.kind }
+      : assignPetTarget(snapshot, identity, options.preferredAnimalId ?? assignedTarget?.id, assignedTarget?.kind)
   let nextSnapshot = assignment.replacedBubbleTaskKey
     ? removeBubble(snapshot, assignment.replacedBubbleTaskKey)
     : snapshot
   const animalId = assignment.animalId
+  const petTargetKind = assignment.petTargetKind ?? 'animal'
 
   if (!animalId) {
     return queueTaskBinding(nextSnapshot, identity, status, timestamp, {
       currentToolName: options.currentToolName,
       existing,
-      queuedAnimalId: assignedAnimalId ?? undefined,
+      queuedAnimalId: assignedTarget?.id,
+      queuedPetTargetKind: assignedTarget?.kind,
       queueReason: queuedBinding?.queueReason ?? getQueueReason(snapshot, identity)
     })
   }
@@ -121,6 +131,8 @@ function updateTaskBinding(
     kind: identity.kind,
     messages: existing?.messages,
     openedInCherry: existing?.openedInCherry,
+    petTargetId: animalId,
+    petTargetKind,
     render: existing?.render,
     sourceId: identity.sourceId,
     sourceKey: identity.sourceKey,
@@ -161,6 +173,7 @@ function completeTaskBinding(
 
   const text = normalizeStreamText(streamText ?? existing.streamText)
   const messages = text ? createStreamMessageSummary(identity.taskKey, text, timestamp) : existing.messages
+  const petTarget = getTaskPetTarget(existing)
   const bubble: PetTaskBubbleSnapshot = {
     animalId: existing.animalId,
     bubbleDismissed: existing.bubbleDismissed ?? false,
@@ -169,6 +182,8 @@ function completeTaskBinding(
     kind: identity.kind,
     messages,
     openedInCherry: existing.openedInCherry,
+    petTargetId: petTarget.id,
+    petTargetKind: petTarget.kind,
     queueReason: undefined,
     render: message ? toPetTaskMessageRender(message) : existing.render,
     sourceId: existing.sourceId,
@@ -191,9 +206,7 @@ function completeTaskBinding(
     queuedTasks: snapshot.queuedTasks.filter((task) => task.taskKey !== identity.taskKey)
   })
 
-  return activeBinding
-    ? promoteQueuedTask(nextSnapshot, activeBinding.animalId, activeBinding.sourceKey, timestamp)
-    : nextSnapshot
+  return activeBinding ? promoteQueuedTask(nextSnapshot, activeBinding, timestamp) : nextSnapshot
 }
 
 function queueTaskBinding(
@@ -206,16 +219,21 @@ function queueTaskBinding(
     existing?: PetTaskBinding
     queueReason?: PetQueueReason
     queuedAnimalId?: string
+    queuedPetTargetKind?: PetPresentationTargetKind
   }
 ): PetPastureSnapshot {
+  const animalId = options.existing?.animalId ?? options.queuedAnimalId ?? ''
+  const petTargetKind = options.existing ? getTaskPetTarget(options.existing).kind : options.queuedPetTargetKind
   const task: PetTaskBinding = {
-    animalId: options.existing?.animalId ?? options.queuedAnimalId ?? '',
+    animalId,
     bubbleDismissed: false,
     currentToolName: options.currentToolName ?? options.existing?.currentToolName,
     endedAt: undefined,
     kind: identity.kind,
     messages: options.existing?.messages,
     openedInCherry: options.existing?.openedInCherry,
+    petTargetId: animalId || undefined,
+    petTargetKind,
     queueReason: options.queueReason,
     render: options.existing?.render,
     sourceId: identity.sourceId,
@@ -275,6 +293,8 @@ function upsertPermissionPrompt(
     createdAt: existing?.createdAt ?? timestamp,
     dismissed: existing?.dismissed ?? false,
     kind: 'session',
+    petTargetId: binding.petTargetId,
+    petTargetKind: binding.petTargetKind,
     previewRedacted: approval.previewRedacted,
     previewTruncated: approval.previewTruncated,
     safePreview: approval.safePreview,
@@ -317,18 +337,17 @@ function markTaskForReview(snapshot: PetPastureSnapshot, taskKey: string, timest
 
 function promoteQueuedTask(
   snapshot: PetPastureSnapshot,
-  animalId: string,
-  releasedSourceKey: string,
+  releasedTask: PetTaskBinding,
   timestamp: number
 ): PetPastureSnapshot {
-  const animal = snapshot.animals.find((item) => item.id === animalId && item.enabled)
-  if (!animal) return snapshot
+  const releasedTarget = getTaskPetTarget(releasedTask)
+  if (!isPetTargetEnabled(snapshot, releasedTarget)) return snapshot
 
   const nextTask = snapshot.queuedTasks
-    .filter((task) => canAnimalHandleSource(animal, getIdentityFromTask(task)))
+    .filter((task) => canPetTargetHandleSource(snapshot, releasedTarget, getIdentityFromTask(task)))
     .sort((a, b) => {
-      if (a.sourceKey === releasedSourceKey && b.sourceKey !== releasedSourceKey) return -1
-      if (b.sourceKey === releasedSourceKey && a.sourceKey !== releasedSourceKey) return 1
+      if (a.sourceKey === releasedTask.sourceKey && b.sourceKey !== releasedTask.sourceKey) return -1
+      if (b.sourceKey === releasedTask.sourceKey && a.sourceKey !== releasedTask.sourceKey) return 1
       return a.updatedAt - b.updatedAt
     })[0]
   if (!nextTask) return snapshot
@@ -337,97 +356,198 @@ function promoteQueuedTask(
     ...snapshot,
     bindings: upsertByTaskKey(snapshot.bindings, {
       ...nextTask,
-      animalId,
+      animalId: releasedTarget.id,
+      petTargetId: releasedTarget.id,
+      petTargetKind: releasedTarget.kind,
       queueReason: undefined,
       updatedAt: timestamp
     }),
-    bubbles: snapshot.bubbles.filter((bubble) => bubble.animalId !== animalId),
+    bubbles: snapshot.bubbles.filter((bubble) => !isTaskOnPetTarget(bubble, releasedTarget)),
     queuedTasks: snapshot.queuedTasks.filter((task) => task.taskKey !== nextTask.taskKey)
   })
 }
 
-function assignAnimalId(
+function assignPetTarget(
   snapshot: PetPastureSnapshot,
   identity: PetPresentationTaskIdentity,
-  preferredAnimalId?: string
-): AnimalAssignment {
-  if (preferredAnimalId && canAnimalHandleSourceById(snapshot.animals, preferredAnimalId, identity)) {
-    return { animalId: preferredAnimalId }
+  preferredTargetId?: string,
+  preferredTargetKind: PetPresentationTargetKind = 'animal'
+): PetTargetAssignment {
+  if (
+    preferredTargetId &&
+    canPetTargetHandleSource(snapshot, { id: preferredTargetId, kind: preferredTargetKind }, identity)
+  ) {
+    return { animalId: preferredTargetId, petTargetKind: preferredTargetKind }
   }
 
   const allAnimals = snapshot.animals
-  const hasExplicitAgentBinding = allAnimals.some((animal) => animal.agentId === identity.sourceId)
+  const allVrmProfiles = getVrmStageModelProfiles(snapshot)
+  const hasExplicitAgentBinding =
+    allAnimals.some((animal) => animal.agentId === identity.sourceId) ||
+    allVrmProfiles.some((profile) => profile.agentId === identity.sourceId)
   const enabledAnimals = allAnimals.filter((animal) => animal.enabled)
-  if (enabledAnimals.length === 0) return { animalId: null }
+  const enabledVrmProfiles = allVrmProfiles.filter((profile) => profile.enabled)
 
   const configuredAnimal = enabledAnimals.find(
     (animal) =>
-      animal.agentId === identity.sourceId && !isAnimalOccupiedByOtherSource(snapshot, animal.id, identity.sourceKey)
+      animal.agentId === identity.sourceId &&
+      !isPetTargetOccupiedByOtherSource(snapshot, { id: animal.id, kind: 'animal' }, identity.sourceKey)
   )
-  if (configuredAnimal) return { animalId: configuredAnimal.id }
+  if (configuredAnimal) return { animalId: configuredAnimal.id, petTargetKind: 'animal' }
+
+  const configuredVrmProfile = enabledVrmProfiles.find(
+    (profile) =>
+      profile.agentId === identity.sourceId &&
+      !isPetTargetOccupiedByOtherSource(snapshot, { id: profile.modelId, kind: 'vrm-model' }, identity.sourceKey)
+  )
+  if (configuredVrmProfile) return { animalId: configuredVrmProfile.modelId, petTargetKind: 'vrm-model' }
+
   if (hasExplicitAgentBinding) return { animalId: null }
+  if (enabledAnimals.length === 0) return { animalId: null }
 
   const freeAnimal = enabledAnimals.find(
     (animal) =>
-      canAnimalHandleSource(animal, identity) && !isAnimalOccupiedByOtherSource(snapshot, animal.id, identity.sourceKey)
+      canAnimalHandleSource(animal, identity) &&
+      !isPetTargetOccupiedByOtherSource(snapshot, { id: animal.id, kind: 'animal' }, identity.sourceKey)
   )
-  if (freeAnimal) return { animalId: freeAnimal.id }
+  if (freeAnimal) return { animalId: freeAnimal.id, petTargetKind: 'animal' }
 
   const animalById = new Map(enabledAnimals.map((animal) => [animal.id, animal]))
   const oldestBubble = snapshot.bubbles
     .filter((bubble) => {
       const animal = animalById.get(bubble.animalId)
-      return bubble.status !== 'failed' && !bubble.bubbleDismissed && animal && canAnimalHandleSource(animal, identity)
+      return (
+        bubble.status !== 'failed' &&
+        !bubble.bubbleDismissed &&
+        animal &&
+        canPetTargetHandleSource(snapshot, getTaskPetTarget(bubble), identity)
+      )
     })
     .sort((a, b) => a.updatedAt - b.updatedAt)[0]
 
   return oldestBubble
-    ? { animalId: oldestBubble.animalId, replacedBubbleTaskKey: oldestBubble.taskKey }
+    ? {
+        animalId: oldestBubble.animalId,
+        petTargetKind: getTaskPetTarget(oldestBubble).kind,
+        replacedBubbleTaskKey: oldestBubble.taskKey
+      }
     : { animalId: null }
 }
 
-function getAssignedSourceAnimalId(snapshot: PetPastureSnapshot, identity: PetPresentationTaskIdentity): string | null {
-  const assignedAnimalId =
-    snapshot.bindings.find((task) => task.sourceKey === identity.sourceKey)?.animalId ||
-    snapshot.queuedTasks.find((task) => task.sourceKey === identity.sourceKey)?.animalId ||
-    snapshot.bubbles.find((task) => task.sourceKey === identity.sourceKey && !task.bubbleDismissed)?.animalId ||
-    snapshot.permissionPrompts.find((prompt) => prompt.sourceKey === identity.sourceKey && !prompt.dismissed)?.animalId
-  if (!assignedAnimalId) return null
-
-  return canAnimalHandleSourceById(snapshot.animals, assignedAnimalId, identity) ? assignedAnimalId : null
-}
-
-function canAnimalHandleSourceById(
-  animals: PetAnimalInstance[],
-  animalId: string,
+function getAssignedSourcePetTarget(
+  snapshot: PetPastureSnapshot,
   identity: PetPresentationTaskIdentity
-): boolean {
-  const animal = animals.find((item) => item.id === animalId && item.enabled)
-  return Boolean(animal && canAnimalHandleSource(animal, identity))
+): PetPresentationTarget | null {
+  const assignedTask =
+    snapshot.bindings.find((task) => task.sourceKey === identity.sourceKey) ||
+    snapshot.queuedTasks.find((task) => task.sourceKey === identity.sourceKey) ||
+    snapshot.bubbles.find((task) => task.sourceKey === identity.sourceKey && !task.bubbleDismissed) ||
+    snapshot.permissionPrompts.find((prompt) => prompt.sourceKey === identity.sourceKey && !prompt.dismissed)
+  const assignedTarget = assignedTask ? getTaskPetTarget(assignedTask) : null
+  if (assignedTarget && canPetTargetHandleSource(snapshot, assignedTarget, identity)) return assignedTarget
+
+  const assignedAnimal = snapshot.animals.find((animal) => animal.agentId === identity.sourceId)
+  if (assignedAnimal && canPetTargetHandleSource(snapshot, { id: assignedAnimal.id, kind: 'animal' }, identity)) {
+    return { id: assignedAnimal.id, kind: 'animal' }
+  }
+
+  const assignedVrmProfile = getVrmStageModelProfiles(snapshot).find((profile) => profile.agentId === identity.sourceId)
+  if (
+    assignedVrmProfile &&
+    canPetTargetHandleSource(snapshot, { id: assignedVrmProfile.modelId, kind: 'vrm-model' }, identity)
+  ) {
+    return { id: assignedVrmProfile.modelId, kind: 'vrm-model' }
+  }
+
+  return null
 }
 
 function canAnimalHandleSource(animal: PetAnimalInstance, identity: PetPresentationTaskIdentity): boolean {
   return !animal.agentId || animal.agentId === identity.sourceId
 }
 
-function isAnimalOccupiedByOtherSource(snapshot: PetPastureSnapshot, animalId: string, sourceKey: string): boolean {
+function canPetTargetHandleSource(
+  snapshot: PetPastureSnapshot,
+  target: PetPresentationTarget,
+  identity: PetPresentationTaskIdentity
+): boolean {
+  if (target.kind === 'animal') {
+    const animal = snapshot.animals.find((item) => item.id === target.id && item.enabled)
+    return Boolean(animal && canAnimalHandleSource(animal, identity))
+  }
+
+  const profile = getVrmStageModelProfile(snapshot, target.id)
+  return Boolean(profile?.enabled && profile.agentId === identity.sourceId)
+}
+
+function isPetTargetEnabled(snapshot: PetPastureSnapshot, target: PetPresentationTarget): boolean {
+  if (target.kind === 'animal') {
+    return snapshot.animals.some((animal) => animal.id === target.id && animal.enabled)
+  }
+
+  return Boolean(getVrmStageModelProfile(snapshot, target.id)?.enabled)
+}
+
+function isTaskOnPetTarget(
+  task: Pick<
+    PetTaskBinding | PetTaskBubbleSnapshot | PetPermissionPromptSnapshot,
+    'animalId' | 'petTargetId' | 'petTargetKind'
+  >,
+  target: PetPresentationTarget
+): boolean {
+  const taskTarget = getTaskPetTarget(task)
+  return taskTarget.id === target.id && taskTarget.kind === target.kind
+}
+
+function getTaskPetTarget(
+  task: Pick<
+    PetTaskBinding | PetTaskBubbleSnapshot | PetPermissionPromptSnapshot,
+    'animalId' | 'petTargetId' | 'petTargetKind'
+  >
+): PetPresentationTarget {
+  return {
+    id: task.petTargetId || task.animalId,
+    kind: task.petTargetKind ?? 'animal'
+  }
+}
+
+function getVrmStageModelProfile(snapshot: PetPastureSnapshot, modelId: string): PetVrmStageModelProfile | undefined {
+  return snapshot.vrmModelProfiles[modelId]
+}
+
+function getVrmStageModelProfiles(snapshot: PetPastureSnapshot): PetVrmStageModelProfile[] {
+  return Object.values(snapshot.vrmModelProfiles)
+}
+
+function isPetTargetOccupiedByOtherSource(
+  snapshot: PetPastureSnapshot,
+  target: PetPresentationTarget,
+  sourceKey: string
+): boolean {
   return (
-    snapshot.bindings.some((binding) => binding.animalId === animalId && binding.sourceKey !== sourceKey) ||
-    snapshot.queuedTasks.some((task) => task.animalId === animalId && task.sourceKey !== sourceKey) ||
+    snapshot.bindings.some((binding) => isTaskOnPetTarget(binding, target) && binding.sourceKey !== sourceKey) ||
+    snapshot.queuedTasks.some((task) => isTaskOnPetTarget(task, target) && task.sourceKey !== sourceKey) ||
     snapshot.bubbles.some(
-      (bubble) => !bubble.bubbleDismissed && bubble.animalId === animalId && bubble.sourceKey !== sourceKey
+      (bubble) => !bubble.bubbleDismissed && isTaskOnPetTarget(bubble, target) && bubble.sourceKey !== sourceKey
     ) ||
     snapshot.permissionPrompts.some(
-      (prompt) => !prompt.dismissed && prompt.animalId === animalId && prompt.sourceKey !== sourceKey
+      (prompt) => !prompt.dismissed && isTaskOnPetTarget(prompt, target) && prompt.sourceKey !== sourceKey
     )
   )
 }
 
 function getQueueReason(snapshot: PetPastureSnapshot, identity: PetPresentationTaskIdentity): PetQueueReason {
   const boundAnimal = snapshot.animals.find((animal) => animal.agentId === identity.sourceId)
+  const boundVrmProfile = getVrmStageModelProfiles(snapshot).find((profile) => profile.agentId === identity.sourceId)
   if (boundAnimal && !boundAnimal.enabled) return 'bound-disabled'
-  if (boundAnimal) return 'bound-busy'
-  if (!snapshot.animals.some((animal) => animal.enabled)) return 'no-enabled-pet'
+  if (boundVrmProfile && !boundVrmProfile.enabled) return 'bound-disabled'
+  if (boundAnimal || boundVrmProfile) return 'bound-busy'
+  if (
+    !snapshot.animals.some((animal) => animal.enabled) &&
+    !getVrmStageModelProfiles(snapshot).some((profile) => profile.enabled)
+  ) {
+    return 'no-enabled-pet'
+  }
   return 'no-free-pet'
 }
 

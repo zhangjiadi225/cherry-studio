@@ -51,7 +51,7 @@ beforeEach(() => {
 })
 
 describe('vrm stage model profiles', () => {
-  it('normalizes minimal VRM display settings without agent or personality data', () => {
+  it('normalizes minimal VRM display settings without personality data', () => {
     const profile = createPetVrmStageModelProfile({
       enabled: true,
       modelId: 'model-a',
@@ -71,8 +71,20 @@ describe('vrm stage model profiles', () => {
       positionY: 0.2,
       positionZ: -0.1
     })
-    expect(profiles.get('model-a')).not.toHaveProperty('agentId')
+    expect(profiles.get('model-a')).toHaveProperty('agentId', null)
     expect(profiles.get('model-a')).not.toHaveProperty('personality')
+  })
+
+  it('persists a dedicated agent binding for VRM models', () => {
+    const profile = createPetVrmStageModelProfile({
+      agentId: 'agent-a',
+      enabled: true,
+      modelId: 'model-a'
+    })
+    const cleared = createPetVrmStageModelProfile({ agentId: null }, profile)
+
+    expect(profile.agentId).toBe('agent-a')
+    expect(cleared.agentId).toBeNull()
   })
 
   it('treats disabled VRM models as inactive', () => {

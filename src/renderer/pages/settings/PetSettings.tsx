@@ -258,8 +258,16 @@ const PetSettings: FC = () => {
       const conflictingAnimals = agentId
         ? animals.filter((candidate) => candidate.id !== animal.id && candidate.agentId === agentId)
         : []
+      const conflictingVrmProfiles = agentId
+        ? [...vrmStageModelProfiles.values()].filter((profile) => profile.agentId === agentId)
+        : []
       await Promise.all(
         conflictingAnimals.map((candidate) => window.api.pet.upsertAnimal({ ...candidate, agentId: null }))
+      )
+      await Promise.all(
+        conflictingVrmProfiles.map((profile) =>
+          saveVrmStageModelProfile(createPetVrmStageModelProfile({ agentId: null }, profile))
+        )
       )
       await window.api.pet.upsertAnimal({ ...animal, agentId })
       await refreshSnapshot()
@@ -300,6 +308,44 @@ const PetSettings: FC = () => {
       currentProfile
     )
     await saveVrmStageModelProfile(nextProfile)
+  }
+
+  const handleVrmModelAgentChange = async (model: PetVrmModelSummary, value: string) => {
+    const agentId = value === NO_AGENT_VALUE ? null : value
+    const currentProfile = vrmStageModelProfiles.get(model.id)
+    const order = currentProfile?.order ?? getNextVrmStageModelOrder(vrmStageModelProfiles)
+    const nextProfile = createPetVrmStageModelProfile(
+      {
+        agentId,
+        enabled: currentProfile?.enabled ?? false,
+        modelId: model.id,
+        order,
+        positionX: currentProfile?.positionX ?? getDefaultVrmStageModelPositionX(order),
+        positionY: currentProfile?.positionY ?? 0,
+        positionZ: currentProfile?.positionZ ?? getDefaultVrmStageModelPositionZ(order)
+      },
+      currentProfile
+    )
+
+    try {
+      const conflictingAnimals = agentId ? animals.filter((animal) => animal.agentId === agentId) : []
+      const conflictingVrmProfiles = agentId
+        ? [...vrmStageModelProfiles.values()].filter(
+            (profile) => profile.modelId !== model.id && profile.agentId === agentId
+          )
+        : []
+
+      await Promise.all(conflictingAnimals.map((animal) => window.api.pet.upsertAnimal({ ...animal, agentId: null })))
+      await Promise.all(
+        conflictingVrmProfiles.map((profile) =>
+          saveVrmStageModelProfile(createPetVrmStageModelProfile({ agentId: null }, profile))
+        )
+      )
+      await saveVrmStageModelProfile(nextProfile)
+      await refreshSnapshot()
+    } catch (error) {
+      window.toast.error(t('settings.pet.animal_save_failed', { reason: formatError(error) }))
+    }
   }
 
   const handleVrmSceneSettingsChange = async (patch: Partial<PetVrmStageSceneSettings>) => {
@@ -465,6 +511,23 @@ const PetSettings: FC = () => {
                           />
                         </div>
                         <div className="grid gap-3 sm:grid-cols-2">
+                          <PetPackageSelectField label={t('settings.pet.agent_binding')}>
+                            <Select
+                              value={effectiveProfile.agentId ?? NO_AGENT_VALUE}
+                              onValueChange={(value) => void handleVrmModelAgentChange(model, value)}>
+                              <SelectTrigger size="sm" className="w-full">
+                                <SelectValue placeholder={t('settings.pet.select_agent')} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={NO_AGENT_VALUE}>{t('common.none')}</SelectItem>
+                                {agents.map((agent) => (
+                                  <SelectItem key={agent.id} value={agent.id}>
+                                    {agent.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </PetPackageSelectField>
                           <PetPackageSelectField label={t('settings.pet.vrm.animation_preset')}>
                             <Select
                               value={effectiveProfile.animationPreset ?? 'vroid-show-full-body'}

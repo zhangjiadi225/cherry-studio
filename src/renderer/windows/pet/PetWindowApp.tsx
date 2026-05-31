@@ -215,24 +215,34 @@ const PetWindowApp: FC = () => {
     () => (spriteSceneEnabled ? snapshot.animals.filter((animal) => animal.enabled) : []),
     [snapshot.animals, spriteSceneEnabled]
   )
-  const bindingByAnimalId = useMemo(() => buildPetTaskBindingByAnimalId(snapshot.bindings), [snapshot.bindings])
+  const spriteBindings = useMemo(() => snapshot.bindings.filter(isPetTaskBoundToSpriteAnimal), [snapshot.bindings])
+  const spriteBubbles = useMemo(() => snapshot.bubbles.filter(isPetTaskBoundToSpriteAnimal), [snapshot.bubbles])
+  const spritePermissionPrompts = useMemo(
+    () => snapshot.permissionPrompts.filter(isPetTaskBoundToSpriteAnimal),
+    [snapshot.permissionPrompts]
+  )
+  const spriteQueuedTasks = useMemo(
+    () => snapshot.queuedTasks.filter(isPetTaskBoundToSpriteAnimal),
+    [snapshot.queuedTasks]
+  )
+  const bindingByAnimalId = useMemo(() => buildPetTaskBindingByAnimalId(spriteBindings), [spriteBindings])
   const boundedPetScale = clampPetScale(petScale)
   const petDimensions = useMemo(() => getPetDimensions(boundedPetScale), [boundedPetScale])
   const bubbleByAnimalId = useMemo(
-    () => new Map(snapshot.bubbles.map((bubble) => [bubble.animalId, bubble])),
-    [snapshot.bubbles]
+    () => new Map(spriteBubbles.map((bubble) => [bubble.animalId, bubble])),
+    [spriteBubbles]
   )
   const controlPanels = useMemo(
     () =>
       spriteSceneEnabled
         ? buildPetPanelSnapshots({
-            bindings: snapshot.bindings,
-            bubbles: snapshot.bubbles,
-            permissionPrompts: snapshot.permissionPrompts,
-            queuedTasks: snapshot.queuedTasks
+            bindings: spriteBindings,
+            bubbles: spriteBubbles,
+            permissionPrompts: spritePermissionPrompts,
+            queuedTasks: spriteQueuedTasks
           })
         : [],
-    [snapshot.bindings, snapshot.bubbles, snapshot.permissionPrompts, snapshot.queuedTasks, spriteSceneEnabled]
+    [spriteBindings, spriteBubbles, spritePermissionPrompts, spriteQueuedTasks, spriteSceneEnabled]
   )
   const controlSourceGroups = useMemo(() => buildControlIslandSourceGroups(controlPanels), [controlPanels])
   const controlQueueSummary = useMemo(() => buildControlIslandQueueSummary(controlPanels), [controlPanels])
@@ -824,6 +834,10 @@ function getFirstPositiveFiniteNumber(...values: Array<number | undefined>): num
 
 export function isPetHitTarget(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest('[data-pet-hit-zone="true"]'))
+}
+
+function isPetTaskBoundToSpriteAnimal(task: { petTargetKind?: string }): boolean {
+  return !task.petTargetKind || task.petTargetKind === 'animal'
 }
 
 export function buildPetTaskBindingByAnimalId(bindings: PetTaskBinding[]): Map<string, PetTaskBinding> {

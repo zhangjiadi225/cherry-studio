@@ -278,6 +278,7 @@ export const PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS: PetVrmStageSceneSettings = {
 }
 
 export type PetVrmStageModelProfile = {
+  agentId?: string | null
   animationPreset?: PetVrmStageAnimationPreset
   blink?: boolean
   createdAt: number
@@ -310,6 +311,7 @@ export function createPetVrmStageModelProfile(
   if (!modelId) throw new Error('VRM model id is required')
 
   return {
+    agentId: normalizePetOptionalString('agentId' in input ? input.agentId : previous?.agentId) ?? null,
     createdAt: Number.isFinite(input.createdAt) ? Number(input.createdAt) : (previous?.createdAt ?? now),
     animationPreset: normalizePetVrmStageAnimationPreset(input.animationPreset ?? previous?.animationPreset),
     blink: typeof input.blink === 'boolean' ? input.blink : (previous?.blink ?? true),
@@ -438,6 +440,8 @@ export type PetTaskStatus = 'running' | 'waiting' | 'review' | 'done' | 'failed'
 
 export type PetSourceKind = 'agent'
 
+export type PetPresentationTargetKind = 'animal' | 'vrm-model'
+
 export type PetQueueReason = 'bound-disabled' | 'bound-busy' | 'no-enabled-pet' | 'no-free-pet'
 
 export type PetTaskMessageSummary = {
@@ -456,6 +460,8 @@ export type PetTaskBinding = {
   taskKey: string
   kind: PetTaskKind
   targetId: string
+  petTargetId?: string
+  petTargetKind?: PetPresentationTargetKind
   sourceKey: string
   sourceKind: PetSourceKind
   sourceId: string
@@ -479,6 +485,8 @@ export type PetTaskBubbleSnapshot = {
   taskKey: string
   kind: PetTaskKind
   targetId: string
+  petTargetId?: string
+  petTargetKind?: PetPresentationTargetKind
   sourceKey: string
   sourceKind: PetSourceKind
   sourceId: string
@@ -508,6 +516,8 @@ export type PetPermissionPromptSnapshot = {
   taskKey: string
   kind: Extract<PetTaskKind, 'session'>
   targetId: string
+  petTargetId?: string
+  petTargetKind?: PetPresentationTargetKind
   sourceKey: string
   sourceKind: PetSourceKind
   sourceId: string

@@ -120,6 +120,7 @@ vi.mock('@cherrystudio/ui', async (importOriginal) => ({
         aria-label={`select-vroid-greeting-${value}`}
         onClick={() => onValueChange?.('vroid-greeting')}
       />
+      <button type="button" aria-label={`select-agent-b-${value}`} onClick={() => onValueChange?.('agent-b')} />
       <button type="button" aria-label={`select-animal-b-${value}`} onClick={() => onValueChange?.('animal-b')} />
     </div>
   ),
@@ -266,13 +267,13 @@ describe('PetSettings', () => {
     expect(screen.getByText('settings.pet.vrm.scene_settings')).toBeInTheDocument()
     expect(screen.getByText('settings.pet.vrm.expression')).toBeInTheDocument()
     expect(screen.getByText('settings.pet.vrm.look_at_cursor')).toBeInTheDocument()
+    expect(screen.getByText('settings.pet.agent_binding')).toBeInTheDocument()
     expect(screen.queryByText('settings.pet.window_width')).not.toBeInTheDocument()
     expect(screen.queryByText('settings.pet.pet_size')).not.toBeInTheDocument()
     expect(screen.queryByText('settings.pet.vrm.presets')).not.toBeInTheDocument()
     expect(screen.queryByText('settings.pet.vrm.preset_source')).not.toBeInTheDocument()
     expect(screen.queryByText('settings.pet.packages')).not.toBeInTheDocument()
     expect(screen.queryByText('settings.pet.personality.label')).not.toBeInTheDocument()
-    expect(screen.queryByText('settings.pet.agent_binding')).not.toBeInTheDocument()
     expect(spriteAnimatorMock).not.toHaveBeenCalled()
 
     expect(window.api.pet.upsertAnimal).not.toHaveBeenCalled()
@@ -349,6 +350,16 @@ describe('PetSettings', () => {
       expect(petVrmStageConfig.modelProfiles).toMatchObject({
         'model-a': {
           animationPreset: 'vroid-greeting'
+        }
+      })
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'select-agent-b-__none__' }))
+
+    await waitFor(() => {
+      expect(petVrmStageConfig.modelProfiles).toMatchObject({
+        'model-a': {
+          agentId: 'agent-b'
         }
       })
     })

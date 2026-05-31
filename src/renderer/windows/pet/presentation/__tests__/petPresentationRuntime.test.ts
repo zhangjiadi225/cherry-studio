@@ -1,5 +1,6 @@
 import type { AgentPresentationEvent } from '@shared/ai/agentPresentationEvents'
 import {
+  createPetVrmStageModelProfile,
   PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS,
   type PetAnimalInstance,
   type PetPackageInfo,
@@ -198,6 +199,35 @@ describe('petPresentationRuntime', () => {
         animalId: 'animal-a',
         status: 'done',
         streamText: 'hello world',
+        taskKey: 'session:session-a'
+      }
+    ])
+  })
+
+  it('assigns agent presentation events to dedicated VRM model profiles', () => {
+    const profile = createPetVrmStageModelProfile({
+      agentId: 'agent-a',
+      enabled: true,
+      modelId: 'model-a'
+    })
+    let state = updatePetPresentationRuntimeState(
+      createPetPresentationRuntimeState(),
+      createSnapshot({
+        vrmModelProfiles: {
+          [profile.modelId]: profile
+        }
+      })
+    )
+
+    state = updatePetPresentationRuntimeStateFromAgentEvent(state, createAgentEvent('stream.started'))
+
+    expect(state.snapshot.bindings).toMatchObject([
+      {
+        animalId: 'model-a',
+        petTargetId: 'model-a',
+        petTargetKind: 'vrm-model',
+        sourceId: 'agent-a',
+        status: 'running',
         taskKey: 'session:session-a'
       }
     ])

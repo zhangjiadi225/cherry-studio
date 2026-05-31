@@ -92,15 +92,25 @@ function mergePetPresentationBaseSnapshot(
   snapshot: PetPastureSnapshot
 ): PetPastureSnapshot {
   const enabledAnimalIds = new Set(snapshot.animals.filter((animal) => animal.enabled).map((animal) => animal.id))
+  const enabledVrmModelIds = new Set(
+    Object.values(snapshot.vrmModelProfiles)
+      .filter((profile) => profile.enabled)
+      .map((profile) => profile.modelId)
+  )
+  const isTargetEnabled = (task: { animalId: string; petTargetId?: string; petTargetKind?: string }) => {
+    const targetId = task.petTargetId || task.animalId
+    return task.petTargetKind === 'vrm-model' ? enabledVrmModelIds.has(targetId) : enabledAnimalIds.has(targetId)
+  }
+
   return {
     ...current,
     animals: snapshot.animals,
-    bindings: current.bindings.filter((binding) => enabledAnimalIds.has(binding.animalId)),
-    bubbles: current.bubbles.filter((bubble) => enabledAnimalIds.has(bubble.animalId)),
+    bindings: current.bindings.filter(isTargetEnabled),
+    bubbles: current.bubbles.filter(isTargetEnabled),
     bounds: snapshot.bounds,
     packages: snapshot.packages,
-    permissionPrompts: current.permissionPrompts.filter((prompt) => enabledAnimalIds.has(prompt.animalId)),
-    queuedTasks: current.queuedTasks.filter((task) => !task.animalId || enabledAnimalIds.has(task.animalId)),
+    permissionPrompts: current.permissionPrompts.filter(isTargetEnabled),
+    queuedTasks: current.queuedTasks.filter((task) => !task.animalId || isTargetEnabled(task)),
     vrmModelProfiles: snapshot.vrmModelProfiles,
     vrmSceneSettings: snapshot.vrmSceneSettings
   }
