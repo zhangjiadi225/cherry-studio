@@ -18,6 +18,7 @@ describe('VrmPresentationMotion', () => {
         queuedTasks: []
       }).get(model.modelId)
     ).toMatchObject({
+      animationTimeScale: 0.72,
       expression: 'neutral',
       phase: 'thinking'
     })
@@ -31,6 +32,7 @@ describe('VrmPresentationMotion', () => {
         queuedTasks: []
       }).get(model.modelId)
     ).toMatchObject({
+      animationTimeScale: 1.15,
       expression: 'happy',
       phase: 'speaking'
     })
@@ -44,6 +46,8 @@ describe('VrmPresentationMotion', () => {
         queuedTasks: []
       }).get(model.modelId)
     ).toMatchObject({
+      animationPreset: 'vroid-shoot',
+      animationTimeScale: 1.28,
       expression: 'surprised',
       phase: 'tool-running'
     })
@@ -60,9 +64,27 @@ describe('VrmPresentationMotion', () => {
     }).get(model.modelId)
 
     expect(state).toMatchObject({
+      animationPreset: undefined,
       expression: 'surprised',
       phase: 'waiting-permission',
       taskKey: 'session:session-a'
+    })
+  })
+
+  it('maps queued VRM tasks to low-intensity thinking motion', () => {
+    const model = createModel()
+    const state = buildPetVrmPresentationMotionStateMap({
+      bindings: [],
+      bubbles: [],
+      models: [model],
+      permissionPrompts: [],
+      queuedTasks: [createBinding({ queueReason: 'no-free-pet' })]
+    }).get(model.modelId)
+
+    expect(state).toMatchObject({
+      animationTimeScale: 0.6,
+      expression: 'neutral',
+      phase: 'thinking'
     })
   })
 
@@ -81,6 +103,7 @@ describe('VrmPresentationMotion', () => {
         queuedTasks: []
       }).get(model.modelId)
     ).toMatchObject({
+      animationPreset: 'vroid-peace-sign',
       expression: 'happy',
       phase: 'done-pulse'
     })
@@ -95,6 +118,7 @@ describe('VrmPresentationMotion', () => {
         queuedTasks: []
       }).get(model.modelId)
     ).toMatchObject({
+      animationPreset: 'vroid-squat',
       expression: 'sad',
       phase: 'failed-pulse'
     })

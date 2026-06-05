@@ -7,14 +7,36 @@ import { disposePetVrmModel, loadPetVrmModel } from '../vrmLoader'
 import { createPetVrmModelObjectUrl } from '../vrmModelLibrary'
 import VrmPastureScene, { isRenderTargetRegionTransparent, type RenderTargetRegionRead } from '../VrmPastureScene'
 
-const threeMocks = vi.hoisted(() => ({
-  animationMixers: [] as Array<Record<string, unknown>>,
-  cameras: [] as Array<Record<string, unknown>>,
-  controls: [] as Array<Record<string, unknown>>,
-  defaultVrmAnimation: { name: 'idle-loop-vrma' },
-  defaultVrmClip: { name: 'idle-loop-clip', tracks: [] },
-  renderers: [] as Array<Record<string, ReturnType<typeof vi.fn>>>
-}))
+const threeMocks = vi.hoisted(() => {
+  const createClip = (name: string): { clone: () => unknown; name: string; tracks: unknown[] } => ({
+    clone: () => createClip(`${name}-clone`),
+    name,
+    tracks: []
+  })
+
+  return {
+    animationActions: [] as Array<Record<string, unknown>>,
+    animationMixers: [] as Array<Record<string, unknown>>,
+    cameras: [] as Array<Record<string, unknown>>,
+    clocks: [] as Array<{ getDelta: ReturnType<typeof vi.fn> }>,
+    controls: [] as Array<Record<string, unknown>>,
+    createClip,
+    createdVrmClips: [] as Array<{ clone: () => unknown; name: string; tracks: unknown[] }>,
+    defaultVrmAnimation: { name: 'idle-loop-vrma' },
+    defaultVrmClip: createClip('idle-loop-clip'),
+    nextClipIndex: 0,
+    renderers: [] as Array<Record<string, ReturnType<typeof vi.fn>>>
+  }
+})
+
+type MockAnimationAction = Record<
+  'crossFadeTo' | 'fadeIn' | 'fadeOut' | 'isRunning' | 'play' | 'reset' | 'setLoop' | 'stop',
+  ReturnType<typeof vi.fn>
+> & {
+  clampWhenFinished: boolean
+  finish: () => void
+  paused: boolean
+}
 
 vi.mock('@pixiv/three-vrm', () => ({
   VRMExpressionPresetName: {
@@ -180,6 +202,10 @@ vi.mock('three', () => {
 
   class Clock {
     public getDelta = vi.fn(() => 0.016)
+
+    constructor() {
+      threeMocks.clocks.push(this)
+    }
   }
 
   class Light extends Object3D {
@@ -254,8 +280,45 @@ vi.mock('three', () => {
     ) {}
   }
 
+  class AnimationAction {
+    public clampWhenFinished = false
+    public enabled = true
+    public paused = false
+    private running = false
+
+    public crossFadeTo = vi.fn(() => this)
+    public fadeIn = vi.fn(() => this)
+    public fadeOut = vi.fn(() => this)
+    public finish = () => {
+      this.running = false
+    }
+    public isRunning = vi.fn(() => this.running)
+    public play = vi.fn(() => {
+      this.running = true
+      return this
+    })
+    public reset = vi.fn(() => this)
+    public setLoop = vi.fn(() => this)
+    public stop = vi.fn(() => {
+      this.running = false
+      return this
+    })
+
+    constructor() {
+      threeMocks.animationActions.push(this as unknown as Record<string, unknown>)
+    }
+  }
+
   class AnimationMixer {
-    public clipAction = vi.fn(() => ({ play: vi.fn() }))
+    public actions = new Map<unknown, AnimationAction>()
+    public clipAction = vi.fn((clip: unknown) => {
+      let action = this.actions.get(clip)
+      if (!action) {
+        action = new AnimationAction()
+        this.actions.set(clip, action)
+      }
+      return action
+    })
     public stopAllAction = vi.fn()
     public timeScale = 1
     public update = vi.fn()
@@ -276,6 +339,8 @@ vi.mock('three', () => {
     },
     DirectionalLight: Light,
     HemisphereLight: Light,
+    LoopOnce: 'LoopOnce',
+    LoopRepeat: 'LoopRepeat',
     MathUtils: { clamp: (value: number, min: number, max: number) => Math.min(Math.max(value, min), max) },
     Mesh: class Mesh extends Object3D {},
     MOUSE: { DOLLY: 1, PAN: 2, ROTATE: 0 },
@@ -364,7 +429,15 @@ vi.mock('../vrmAnimation', async (importOriginal) => {
   const actual = await importOriginal<typeof VrmAnimationModule>()
   return {
     ...actual,
-    createPetVrmAnimationClip: vi.fn(() => threeMocks.defaultVrmClip),
+    createPetVrmAnimationClip: vi.fn(() => {
+      const clip =
+        threeMocks.nextClipIndex === 0
+          ? threeMocks.defaultVrmClip
+          : threeMocks.createClip(`idle-loop-clip-${threeMocks.nextClipIndex}`)
+      threeMocks.nextClipIndex += 1
+      threeMocks.createdVrmClips.push(clip)
+      return clip
+    }),
     loadPetVrmAnimation: vi.fn(() => Promise.resolve(threeMocks.defaultVrmAnimation)),
     reAnchorRootPositionTrack: vi.fn()
   }
@@ -372,9 +445,13 @@ vi.mock('../vrmAnimation', async (importOriginal) => {
 
 describe('VrmPastureScene', () => {
   beforeEach(() => {
+    threeMocks.animationActions.length = 0
     threeMocks.animationMixers.length = 0
     threeMocks.cameras.length = 0
+    threeMocks.clocks.length = 0
     threeMocks.controls.length = 0
+    threeMocks.createdVrmClips.length = 0
+    threeMocks.nextClipIndex = 0
     threeMocks.renderers.length = 0
     vi.mocked(createPetVrmModelObjectUrl).mockReset()
     vi.mocked(disposePetVrmModel).mockReset()
@@ -497,7 +574,7 @@ describe('VrmPastureScene', () => {
     expect(isRenderTargetRegionTransparent(read, 0.5, 10)).toBe(true)
   })
 
-  it('loads and plays the selected VRMA animation through an AnimationMixer', async () => {
+  it('loads the selected default idle VRMA and plays it once every 30 seconds', async () => {
     const { Object3D } = await import('three')
     const { createPetVrmAnimationClip, loadPetVrmAnimation, reAnchorRootPositionTrack } = await import(
       '../vrmAnimation'
@@ -578,13 +655,12 @@ describe('VrmPastureScene', () => {
       await Promise.resolve()
     })
 
-    expect(loadPetVrmAnimation).toHaveBeenCalledWith('vroid-greeting.vrma')
-    expect(createPetVrmAnimationClip).toHaveBeenCalledWith(vrm, threeMocks.defaultVrmAnimation)
-    expect(reAnchorRootPositionTrack).toHaveBeenCalledWith(threeMocks.defaultVrmClip, vrm)
-
     const mixer = threeMocks.animationMixers.at(-1)
+    expect(loadPetVrmAnimation).not.toHaveBeenCalled()
+    expect(createPetVrmAnimationClip).not.toHaveBeenCalled()
     expect(mixer?.root).toBe(scene)
-    expect(mixer?.clipAction).toHaveBeenCalledWith(threeMocks.defaultVrmClip)
+    expect(threeMocks.animationMixers).toHaveLength(1)
+    expect(threeMocks.animationActions).toHaveLength(0)
 
     act(() => {
       vi.mocked(window.requestAnimationFrame).mock.calls.at(-1)?.[0](16)
@@ -596,11 +672,69 @@ describe('VrmPastureScene', () => {
     expect(mixer?.update).toHaveBeenCalledWith(0.016)
     expect(vrm.expressionManager.setValue).toHaveBeenCalledWith('neutral', 0.35)
     expect(vrm.update).toHaveBeenCalledWith(0.016)
+    expect(loadPetVrmAnimation).not.toHaveBeenCalled()
+
+    threeMocks.clocks.at(-1)?.getDelta.mockReturnValueOnce(29.9)
+    act(() => {
+      vi.mocked(window.requestAnimationFrame).mock.calls.at(-1)?.[0](32)
+    })
+
+    expect(loadPetVrmAnimation).not.toHaveBeenCalled()
+
+    threeMocks.clocks.at(-1)?.getDelta.mockReturnValueOnce(0.1)
+    act(() => {
+      vi.mocked(window.requestAnimationFrame).mock.calls.at(-1)?.[0](48)
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(loadPetVrmAnimation).toHaveBeenCalledWith('vroid-greeting.vrma')
+    expect(createPetVrmAnimationClip).toHaveBeenCalledWith(vrm, threeMocks.defaultVrmAnimation)
+    expect(reAnchorRootPositionTrack).toHaveBeenCalledWith(threeMocks.defaultVrmClip, vrm)
+    expect(mixer?.clipAction).toHaveBeenCalledWith(threeMocks.defaultVrmClip)
+    const action = threeMocks.animationActions.at(-1) as MockAnimationAction | undefined
+    expect(action?.clampWhenFinished).toBe(true)
+    expect(action?.setLoop).toHaveBeenLastCalledWith('LoopOnce', 1)
+    expect(action?.fadeIn).toHaveBeenCalledWith(0.25)
+    expect(action?.reset).toHaveBeenCalledTimes(1)
+    expect(action?.play).toHaveBeenCalledTimes(1)
+
+    action?.finish()
+    threeMocks.clocks.at(-1)?.getDelta.mockReturnValueOnce(30)
+    act(() => {
+      vi.mocked(window.requestAnimationFrame).mock.calls.at(-1)?.[0](64)
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(loadPetVrmAnimation).toHaveBeenCalledTimes(1)
+    expect(threeMocks.animationActions).toHaveLength(1)
+    expect(action?.fadeOut).toHaveBeenCalledWith(0.35)
+
+    threeMocks.clocks.at(-1)?.getDelta.mockReturnValueOnce(30)
+    act(() => {
+      vi.mocked(window.requestAnimationFrame).mock.calls.at(-1)?.[0](80)
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(loadPetVrmAnimation).toHaveBeenCalledTimes(1)
+    expect(threeMocks.animationActions).toHaveLength(1)
+    expect(action?.setLoop).toHaveBeenLastCalledWith('LoopOnce', 1)
+    expect(action?.fadeIn).toHaveBeenCalledWith(0.25)
+    expect(action?.reset).toHaveBeenCalledTimes(2)
+    expect(action?.play).toHaveBeenCalledTimes(2)
 
     rerender(renderModel(0.5, -0.2, 0.15))
 
     act(() => {
-      vi.mocked(window.requestAnimationFrame).mock.calls.at(-1)?.[0](32)
+      vi.mocked(window.requestAnimationFrame).mock.calls.at(-1)?.[0](96)
     })
 
     expect(createPetVrmModelObjectUrl).toHaveBeenCalledTimes(1)
@@ -608,6 +742,91 @@ describe('VrmPastureScene', () => {
     expect(root.position.x).toBeCloseTo(0.5)
     expect(root.position.y).toBeCloseTo(-0.2)
     expect(root.position.z).toBeCloseTo(0.15)
+  })
+
+  it('keeps the built-in still idle preset free of VRMA loading while preserving the model mixer', async () => {
+    const { Object3D } = await import('three')
+    const { createPetVrmAnimationClip, loadPetVrmAnimation } = await import('../vrmAnimation')
+    vi.mocked(loadPetVrmAnimation).mockClear()
+    vi.mocked(createPetVrmAnimationClip).mockClear()
+
+    const root = new Object3D()
+    const scene = new Object3D()
+    const vrm = {
+      expressionManager: {
+        setValue: vi.fn()
+      },
+      humanoid: {
+        getNormalizedBoneNode: vi.fn(() => null)
+      },
+      lookAt: {
+        reset: vi.fn(),
+        target: undefined,
+        update: vi.fn()
+      },
+      scene,
+      update: vi.fn()
+    }
+    vi.mocked(createPetVrmModelObjectUrl).mockResolvedValue({
+      record: {
+        id: 'model-a',
+        importedAt: 1,
+        lastModified: 1,
+        name: 'Model A',
+        size: 1,
+        sourceUrl: 'blob:model',
+        type: 'model/vrm',
+        updatedAt: 1
+      },
+      revoke: vi.fn(),
+      url: 'blob:model'
+    })
+    vi.mocked(loadPetVrmModel).mockResolvedValue({
+      height: 1,
+      root,
+      vrm,
+      width: 1
+    } as never)
+
+    render(
+      <VrmPastureScene
+        models={[
+          {
+            enabled: true,
+            id: 'stage-model',
+            modelId: 'model-a',
+            order: 0,
+            positionX: 0,
+            positionY: 0,
+            positionZ: 0,
+            profile: {
+              animationPreset: 'vrm-idle-still',
+              createdAt: 1,
+              enabled: true,
+              modelId: 'model-a',
+              order: 0,
+              positionX: 0,
+              positionY: 0,
+              positionZ: 0,
+              updatedAt: 1
+            }
+          }
+        ]}
+        stageHeight={640}
+        stageWidth={420}
+      />
+    )
+
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(loadPetVrmAnimation).not.toHaveBeenCalled()
+    expect(createPetVrmAnimationClip).not.toHaveBeenCalled()
+    expect(threeMocks.animationMixers).toHaveLength(1)
+    expect(threeMocks.animationActions).toHaveLength(0)
   })
 
   it('applies transient presentation motion without mutating the default profile motion', async () => {
@@ -714,9 +933,19 @@ describe('VrmPastureScene', () => {
     act(() => {
       vi.mocked(window.requestAnimationFrame).mock.calls.at(-1)?.[0](16)
     })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
 
     const mixer = threeMocks.animationMixers.at(-1)
+    const action = threeMocks.animationActions.at(-1) as MockAnimationAction | undefined
     expect(mixer?.timeScale).toBe(1.15)
+    expect(action?.setLoop).toHaveBeenLastCalledWith('LoopRepeat', Number.POSITIVE_INFINITY)
+    expect(action?.fadeIn).toHaveBeenCalledWith(0.25)
+    expect(action?.reset).toHaveBeenCalledTimes(1)
+    expect(action?.play).toHaveBeenCalledTimes(1)
+    const stopCallCountAfterStart = action?.stop.mock.calls.length
     expect(vrm.expressionManager.setValue).toHaveBeenCalledWith('happy', 0.38)
     expect(vrm.expressionManager.setValue).not.toHaveBeenCalledWith('sad', 0.2)
     expect(profile).toMatchObject({
@@ -750,8 +979,298 @@ describe('VrmPastureScene', () => {
     })
 
     expect(mixer?.timeScale).toBe(0)
+    expect(action?.stop).toHaveBeenCalledTimes(stopCallCountAfterStart ?? 0)
+    expect(action?.fadeOut).toHaveBeenCalledWith(0.35)
     expect(vrm.expressionManager.setValue).toHaveBeenCalledWith('sad', 0.2)
     expect(vrm.expressionManager.setValue).not.toHaveBeenCalledWith('happy', 0.7)
+  })
+
+  it('fades out the previous action when returning to the built-in still idle preset', async () => {
+    const { Object3D } = await import('three')
+    const { loadPetVrmAnimation } = await import('../vrmAnimation')
+    vi.mocked(loadPetVrmAnimation).mockClear()
+
+    const root = new Object3D()
+    const scene = new Object3D()
+    const vrm = {
+      expressionManager: {
+        setValue: vi.fn()
+      },
+      humanoid: {
+        getNormalizedBoneNode: vi.fn(() => null)
+      },
+      lookAt: {
+        reset: vi.fn(),
+        target: undefined,
+        update: vi.fn()
+      },
+      scene,
+      update: vi.fn()
+    }
+    vi.mocked(createPetVrmModelObjectUrl).mockResolvedValue({
+      record: {
+        id: 'model-a',
+        importedAt: 1,
+        lastModified: 1,
+        name: 'Model A',
+        size: 1,
+        sourceUrl: 'blob:model',
+        type: 'model/vrm',
+        updatedAt: 1
+      },
+      revoke: vi.fn(),
+      url: 'blob:model'
+    })
+    vi.mocked(loadPetVrmModel).mockResolvedValue({
+      height: 1,
+      root,
+      vrm,
+      width: 1
+    } as never)
+
+    const renderModel = (
+      presentationMotionStates?: Parameters<typeof VrmPastureScene>[0]['presentationMotionStates']
+    ) => (
+      <VrmPastureScene
+        models={[
+          {
+            enabled: true,
+            id: 'stage-model',
+            modelId: 'model-a',
+            order: 0,
+            positionX: 0.2,
+            positionY: -0.1,
+            positionZ: 0.3,
+            profile: {
+              animationPreset: 'vrm-idle-still',
+              createdAt: 1,
+              enabled: true,
+              modelId: 'model-a',
+              order: 0,
+              positionX: 0.2,
+              positionY: -0.1,
+              positionZ: 0.3,
+              updatedAt: 1
+            }
+          }
+        ]}
+        presentationMotionStates={presentationMotionStates}
+        stageHeight={640}
+        stageWidth={420}
+      />
+    )
+
+    const { rerender } = render(
+      renderModel(
+        new Map([
+          [
+            'model-a',
+            {
+              animationPreset: 'vroid-shoot',
+              animationTimeScale: 1.28,
+              expression: 'surprised',
+              modelId: 'model-a',
+              phase: 'tool-running',
+              startedAt: 1000,
+              taskKey: 'session:session-a',
+              updatedAt: 1100
+            }
+          ]
+        ])
+      )
+    )
+
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    act(() => {
+      vi.mocked(window.requestAnimationFrame).mock.calls.at(-1)?.[0](16)
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(loadPetVrmAnimation).toHaveBeenCalledTimes(1)
+    expect(loadPetVrmAnimation).toHaveBeenLastCalledWith('vroid-shoot.vrma')
+    const action = threeMocks.animationActions.at(-1) as MockAnimationAction | undefined
+    const stopCallCountAfterStart = action?.stop.mock.calls.length
+
+    rerender(renderModel())
+    act(() => {
+      vi.mocked(window.requestAnimationFrame).mock.calls.at(-1)?.[0](32)
+    })
+
+    expect(loadPetVrmAnimation).toHaveBeenCalledTimes(1)
+    expect(threeMocks.animationActions).toHaveLength(1)
+    expect(action?.paused).toBe(false)
+    expect(action?.fadeOut).toHaveBeenCalledWith(0.35)
+    expect(action?.stop).toHaveBeenCalledTimes(stopCallCountAfterStart ?? 0)
+    expect(root.position.x).toBeCloseTo(0.2)
+    expect(root.position.y).toBeCloseTo(-0.1)
+    expect(root.position.z).toBeCloseTo(0.3)
+  })
+
+  it('switches runtime animation presets only when the effective preset changes', async () => {
+    const { Object3D } = await import('three')
+    const { loadPetVrmAnimation } = await import('../vrmAnimation')
+    vi.mocked(loadPetVrmAnimation).mockClear()
+
+    const root = new Object3D()
+    const scene = new Object3D()
+    const vrm = {
+      expressionManager: {
+        setValue: vi.fn()
+      },
+      humanoid: {
+        getNormalizedBoneNode: vi.fn(() => null)
+      },
+      lookAt: {
+        reset: vi.fn(),
+        target: undefined,
+        update: vi.fn()
+      },
+      scene,
+      update: vi.fn()
+    }
+    vi.mocked(createPetVrmModelObjectUrl).mockResolvedValue({
+      record: {
+        id: 'model-a',
+        importedAt: 1,
+        lastModified: 1,
+        name: 'Model A',
+        size: 1,
+        sourceUrl: 'blob:model',
+        type: 'model/vrm',
+        updatedAt: 1
+      },
+      revoke: vi.fn(),
+      url: 'blob:model'
+    })
+    vi.mocked(loadPetVrmModel).mockResolvedValue({
+      height: 1,
+      root,
+      vrm,
+      width: 1
+    } as never)
+
+    const profile = {
+      animationPreset: 'vroid-greeting' as const,
+      createdAt: 1,
+      enabled: true,
+      modelId: 'model-a',
+      order: 0,
+      positionX: 0,
+      positionY: 0,
+      positionZ: 0,
+      updatedAt: 1
+    }
+    const renderModel = (
+      presentationMotionStates?: Parameters<typeof VrmPastureScene>[0]['presentationMotionStates']
+    ) => (
+      <VrmPastureScene
+        models={[
+          {
+            enabled: true,
+            id: 'stage-model',
+            modelId: 'model-a',
+            order: 0,
+            positionX: 0,
+            positionY: 0,
+            positionZ: 0,
+            profile
+          }
+        ]}
+        presentationMotionStates={presentationMotionStates}
+        stageHeight={640}
+        stageWidth={420}
+      />
+    )
+    const runtimeToolMotion = new Map([
+      [
+        'model-a',
+        {
+          animationPreset: 'vroid-shoot' as const,
+          animationTimeScale: 1.28,
+          expression: 'surprised' as const,
+          expressionIntensity: 0.42,
+          modelId: 'model-a',
+          phase: 'tool-running' as const,
+          startedAt: 1000,
+          taskKey: 'session:session-a',
+          updatedAt: 1100
+        }
+      ]
+    ])
+
+    const { rerender } = render(renderModel())
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(loadPetVrmAnimation).not.toHaveBeenCalled()
+    expect(threeMocks.animationMixers).toHaveLength(1)
+
+    rerender(renderModel(runtimeToolMotion))
+    act(() => {
+      vi.mocked(window.requestAnimationFrame).mock.calls.at(-1)?.[0](16)
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(loadPetVrmAnimation).toHaveBeenCalledTimes(1)
+    expect(loadPetVrmAnimation).toHaveBeenLastCalledWith('vroid-shoot.vrma')
+    expect(threeMocks.animationMixers).toHaveLength(1)
+    const shootAction = threeMocks.animationActions.at(-1) as MockAnimationAction | undefined
+    expect(shootAction?.fadeIn).toHaveBeenCalledWith(0.25)
+
+    rerender(renderModel(new Map(runtimeToolMotion)))
+    act(() => {
+      vi.mocked(window.requestAnimationFrame).mock.calls.at(-1)?.[0](32)
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(loadPetVrmAnimation).toHaveBeenCalledTimes(1)
+    expect(threeMocks.animationMixers).toHaveLength(1)
+
+    rerender(renderModel())
+    threeMocks.clocks.at(-1)?.getDelta.mockReturnValueOnce(30)
+    act(() => {
+      vi.mocked(window.requestAnimationFrame).mock.calls.at(-1)?.[0](48)
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(loadPetVrmAnimation).toHaveBeenCalledTimes(1)
+    expect(shootAction?.fadeOut).toHaveBeenCalledWith(0.35)
+
+    threeMocks.clocks.at(-1)?.getDelta.mockReturnValueOnce(30)
+    act(() => {
+      vi.mocked(window.requestAnimationFrame).mock.calls.at(-1)?.[0](64)
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(loadPetVrmAnimation).toHaveBeenCalledTimes(2)
+    expect(loadPetVrmAnimation).toHaveBeenLastCalledWith('vroid-greeting.vrma')
+    expect(threeMocks.animationMixers).toHaveLength(1)
+    const greetingAction = threeMocks.animationActions.at(-1) as MockAnimationAction | undefined
+    expect(shootAction?.crossFadeTo).not.toHaveBeenCalledWith(greetingAction, 0.25, false)
+    expect(greetingAction?.fadeIn).toHaveBeenCalledWith(0.25)
+    expect(profile).toMatchObject({ animationPreset: 'vroid-greeting' })
   })
 
   it('keeps the first ready model camera bootstrap stable when its animation preset changes', async () => {
@@ -849,7 +1368,7 @@ describe('VrmPastureScene', () => {
     })
 
     expect(loadPetVrmModel).toHaveBeenCalledTimes(1)
-    expect(threeMocks.animationMixers).toHaveLength(2)
+    expect(threeMocks.animationMixers).toHaveLength(1)
     expect(lookAt).toHaveBeenCalledTimes(lookAtCallCountAfterBootstrap)
   })
 })

@@ -6853,6 +6853,7 @@
         "ambient_light": "Ambient light",
         "animation_preset": "Animation",
         "animation_presets": {
+          "vrm-idle-still": "Still",
           "vroid-greeting": "Greeting",
           "vroid-model-pose": "Model pose",
           "vroid-peace-sign": "Peace sign",
@@ -6862,6 +6863,7 @@
           "vroid-squat": "Squat"
         },
         "blink": "Blink",
+        "default_idle_animation": "Default idle animation",
         "delete": "Delete VRM model",
         "delete_actor": "Delete VRM actor",
         "delete_confirm": "Delete this VRM model?",
@@ -6879,7 +6881,6 @@
           "sad": "Sad",
           "surprised": "Surprised"
         },
-        "default_idle_animation": "Default idle animation",
         "fill_light": "Fill light",
         "idle_motion": "Play idle motion",
         "import": "Import VRM",

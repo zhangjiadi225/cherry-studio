@@ -347,7 +347,7 @@ describe('PetSettings', () => {
       })
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'select-vroid-greeting-vroid-show-full-body' }))
+    fireEvent.click(screen.getByRole('button', { name: 'select-vroid-greeting-vrm-idle-still' }))
 
     await waitFor(() => {
       expect(petVrmStageConfig.modelProfiles).toMatchObject({

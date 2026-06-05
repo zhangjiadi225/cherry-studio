@@ -11,8 +11,9 @@ vi.mock('../assets/vroid-official/spin.vrma?url', () => ({ default: 'vroid-spin.
 vi.mock('../assets/vroid-official/squat.vrma?url', () => ({ default: 'vroid-squat.vrma' }))
 
 describe('vrmAnimationPresets', () => {
-  it('registers the seven official VRoid VRMA motions', () => {
+  it('registers the quiet built-in idle preset and seven official VRoid VRMA motions', () => {
     expect(PET_VRM_STAGE_ANIMATION_PRESET_DEFINITIONS.map((preset) => preset.id)).toEqual([
+      'vrm-idle-still',
       'vroid-show-full-body',
       'vroid-greeting',
       'vroid-peace-sign',
@@ -21,7 +22,8 @@ describe('vrmAnimationPresets', () => {
       'vroid-model-pose',
       'vroid-squat'
     ])
+    expect(getPetVrmStageAnimationPresetUrl('vrm-idle-still')).toBeUndefined()
     expect(getPetVrmStageAnimationPresetUrl('vroid-greeting')).toBe('vroid-greeting.vrma')
-    expect(getPetVrmStageAnimationPresetUrl('unknown' as never)).toBe('vroid-show-full-body.vrma')
+    expect(getPetVrmStageAnimationPresetUrl('unknown' as never)).toBeUndefined()
   })
 })

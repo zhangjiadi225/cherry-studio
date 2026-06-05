@@ -9,11 +9,15 @@ import { useEffect, useRef } from 'react'
 import {
   ACESFilmicToneMapping,
   AmbientLight,
+  type AnimationAction,
+  type AnimationClip,
   AnimationMixer,
   Box3,
   Clock,
   DirectionalLight,
   HemisphereLight,
+  LoopOnce,
+  LoopRepeat,
   type Mesh,
   MOUSE,
   Object3D,
@@ -91,11 +95,18 @@ type SceneRuntime = {
 }
 
 type VrmModelRuntime = {
+  activeAnimationAction?: AnimationAction
+  activeAnimationPreset?: PetVrmStageAnimationPreset
+  animationActionSlots: Map<PetVrmStageAnimationPreset, VrmAnimationActionSlot[]>
   animationMixer?: AnimationMixer
-  animationPreset?: PetVrmStageAnimationPreset
+  animationGeneration: number
+  animationPlaybackMode: VrmAnimationPlaybackMode | null
+  animationTransitionSerial: number
   blinkRuntime: PetVrmBlinkRuntime
   bootstrapped: boolean
+  defaultAnimationPreset?: PetVrmStageAnimationPreset
   eyeSaccadeRuntime: PetVrmIdleEyeSaccadeRuntime
+  idleAnimationElapsedSeconds: number
   lastLookAtKey: string | null
   loaded?: LoadedPetVrm
   loading: boolean
@@ -103,9 +114,20 @@ type VrmModelRuntime = {
   modelId: string
   objectUrlRevoke?: () => void
   order: number
+  pendingAnimationForceAlternate: boolean
+  pendingAnimationPlaybackMode: VrmAnimationPlaybackMode | null
+  pendingAnimationPreset?: PetVrmStageAnimationPreset
   positionX: number
   positionY: number
   positionZ: number
+}
+
+type VrmAnimationPlaybackMode = 'idle' | 'idle-paused' | 'runtime'
+
+type VrmAnimationActionSlot = {
+  action: AnimationAction
+  clip: AnimationClip
+  preset: PetVrmStageAnimationPreset
 }
 
 export type VrmStageSceneBootstrap = {
@@ -144,6 +166,9 @@ const VRM_STAGE_HEMISPHERE_SKY_COLOR = 0xffffff
 const VRM_STAGE_HEMISPHERE_GROUND_COLOR = 0x222222
 const VRM_STAGE_HIT_TEST_ALPHA_THRESHOLD = 10
 const VRM_STAGE_HIT_TEST_REGION_RADIUS = 25
+const VRM_STAGE_ANIMATION_CROSSFADE_SECONDS = 0.25
+const VRM_STAGE_ANIMATION_RETURN_SECONDS = 0.35
+const VRM_STAGE_IDLE_ANIMATION_INTERVAL_SECONDS = 30
 const DEFAULT_LOOK_AT_TARGET = getSceneSettingsLookAtTarget(PET_VRM_STAGE_DEFAULT_SCENE_SETTINGS)
 const MIN_MODEL_DEPTH_FOR_DISTANCE_BOUNDS = 1e-6
 
@@ -380,23 +405,19 @@ function syncVrmStageModels(runtime: SceneRuntime, props: VrmPastureSceneProps):
       runtime.models.set(model.id, modelRuntime)
     }
 
-    if (modelRuntime.modelId === model.modelId && modelRuntime.animationPreset !== model.profile.animationPreset) {
-      modelRuntime.animationPreset = model.profile.animationPreset
-      modelRuntime.loadGeneration += 1
-      if (modelRuntime.loaded) {
-        const loaded = modelRuntime.loaded
-        modelRuntime.animationMixer?.stopAllAction()
-        void replaceStageModelAnimation(modelRuntime, loaded, modelRuntime.loadGeneration)
-      } else if (model.modelId) {
-        modelRuntime.loading = true
-        emitLoadState(props, { modelId: model.modelId, phase: 'loading' })
-        void loadStageModel(runtime, modelRuntime, model.modelId, props)
-      }
+    if (
+      modelRuntime.modelId === model.modelId &&
+      modelRuntime.defaultAnimationPreset !== model.profile.animationPreset
+    ) {
+      modelRuntime.defaultAnimationPreset = model.profile.animationPreset
+      modelRuntime.idleAnimationElapsedSeconds = 0
     }
 
     if (modelRuntime.modelId !== model.modelId) {
       modelRuntime.modelId = model.modelId
-      modelRuntime.animationPreset = model.profile.animationPreset
+      modelRuntime.activeAnimationPreset = undefined
+      modelRuntime.animationGeneration += 1
+      modelRuntime.defaultAnimationPreset = model.profile.animationPreset
       modelRuntime.loadGeneration += 1
       modelRuntime.loading = Boolean(model.modelId)
       modelRuntime.blinkRuntime = createPetVrmBlinkRuntime()
@@ -416,15 +437,23 @@ function syncVrmStageModels(runtime: SceneRuntime, props: VrmPastureSceneProps):
 
 function createVrmModelRuntime(model: PetVrmStageModel): VrmModelRuntime {
   return {
-    animationPreset: model.profile.animationPreset,
+    activeAnimationPreset: undefined,
+    animationActionSlots: new Map(),
+    animationGeneration: 0,
+    animationPlaybackMode: null,
+    animationTransitionSerial: 0,
     blinkRuntime: createPetVrmBlinkRuntime(),
     bootstrapped: false,
+    defaultAnimationPreset: model.profile.animationPreset,
     eyeSaccadeRuntime: createPetVrmIdleEyeSaccadeRuntime(),
+    idleAnimationElapsedSeconds: 0,
     lastLookAtKey: null,
     loadGeneration: 0,
     loading: false,
     modelId: '',
     order: 0,
+    pendingAnimationForceAlternate: false,
+    pendingAnimationPlaybackMode: null,
     positionX: model.positionX,
     positionY: model.positionY,
     positionZ: model.positionZ
@@ -462,14 +491,15 @@ async function loadStageModel(
       return
     }
 
-    modelRuntime.animationMixer = await createStageModelAnimationMixer(loaded, modelRuntime.animationPreset)
+    const animationMixer = new AnimationMixer(loaded.vrm.scene)
     if (modelRuntime.loadGeneration !== generation) {
-      modelRuntime.animationMixer.stopAllAction()
+      animationMixer.stopAllAction()
       disposePetVrmModel(loaded)
       loadedModel = undefined
       objectUrl.revoke()
       return
     }
+    resetVrmModelAnimationRuntime(modelRuntime, animationMixer)
 
     modelRuntime.loaded = loaded
     modelRuntime.objectUrlRevoke = objectUrl.revoke
@@ -480,7 +510,11 @@ async function loadStageModel(
     emitLoadState(props, { modelId, phase: 'ready' })
   } catch (error) {
     modelRuntime.animationMixer?.stopAllAction()
+    modelRuntime.activeAnimationAction = undefined
+    modelRuntime.animationActionSlots.clear()
     modelRuntime.animationMixer = undefined
+    modelRuntime.idleAnimationElapsedSeconds = 0
+    modelRuntime.animationPlaybackMode = null
     if (loadedModel) {
       disposePetVrmModel(loadedModel)
     }
@@ -492,31 +526,87 @@ async function loadStageModel(
   }
 }
 
-async function replaceStageModelAnimation(
+async function transitionVrmModelAnimation(
   modelRuntime: VrmModelRuntime,
   loaded: LoadedPetVrm,
-  generation: number
+  preset: PetVrmStageAnimationPreset | undefined,
+  playbackMode: VrmAnimationPlaybackMode,
+  forceAlternate = false
 ): Promise<void> {
+  const mixer = modelRuntime.animationMixer
+  if (!mixer || !preset) return
+  if (
+    modelRuntime.pendingAnimationPreset === preset &&
+    modelRuntime.pendingAnimationPlaybackMode === playbackMode &&
+    modelRuntime.pendingAnimationForceAlternate === forceAlternate
+  ) {
+    return
+  }
+
+  const generation = modelRuntime.animationGeneration
+  const transitionSerial = (modelRuntime.animationTransitionSerial += 1)
+  modelRuntime.pendingAnimationPreset = preset
+  modelRuntime.pendingAnimationPlaybackMode = playbackMode
+  modelRuntime.pendingAnimationForceAlternate = forceAlternate
   try {
-    const mixer = await createStageModelAnimationMixer(loaded, modelRuntime.animationPreset)
-    if (modelRuntime.loadGeneration !== generation || modelRuntime.loaded !== loaded) {
-      mixer.stopAllAction()
+    const slot = await getVrmModelAnimationActionSlot(modelRuntime, loaded, mixer, preset, forceAlternate)
+    if (
+      modelRuntime.animationGeneration !== generation ||
+      modelRuntime.animationTransitionSerial !== transitionSerial ||
+      modelRuntime.loaded !== loaded
+    ) {
       return
     }
-    modelRuntime.animationMixer?.stopAllAction()
-    modelRuntime.animationMixer = mixer
+    startVrmModelAnimationAction(modelRuntime, slot.action, preset, playbackMode)
   } catch {
-    if (modelRuntime.loadGeneration === generation && modelRuntime.loaded === loaded) {
-      modelRuntime.animationMixer = undefined
+    if (
+      modelRuntime.animationGeneration === generation &&
+      modelRuntime.animationTransitionSerial === transitionSerial &&
+      modelRuntime.loaded === loaded
+    ) {
+      modelRuntime.idleAnimationElapsedSeconds = 0
+    }
+  } finally {
+    if (modelRuntime.animationTransitionSerial === transitionSerial) {
+      modelRuntime.pendingAnimationPreset = undefined
+      modelRuntime.pendingAnimationPlaybackMode = null
+      modelRuntime.pendingAnimationForceAlternate = false
     }
   }
 }
 
-async function createStageModelAnimationMixer(
+async function getVrmModelAnimationActionSlot(
+  modelRuntime: VrmModelRuntime,
   loaded: LoadedPetVrm,
-  animationPreset: PetVrmStageAnimationPreset | undefined
-): Promise<AnimationMixer> {
-  const animation = await loadPetVrmAnimation(getPetVrmStageAnimationPresetUrl(animationPreset))
+  mixer: AnimationMixer,
+  preset: PetVrmStageAnimationPreset,
+  forceAlternate: boolean
+): Promise<VrmAnimationActionSlot> {
+  const slots = modelRuntime.animationActionSlots.get(preset) ?? []
+  if (!forceAlternate && slots[0]) return slots[0]
+
+  const reusableAlternate = forceAlternate
+    ? slots.find((slot) => slot.action !== modelRuntime.activeAnimationAction)
+    : undefined
+  if (reusableAlternate) return reusableAlternate
+
+  const sourceSlot = slots[0]
+  const slot = sourceSlot
+    ? createVrmModelAnimationActionSlotFromClip(mixer, preset, sourceSlot.clip.clone())
+    : await createVrmModelAnimationActionSlot(loaded, mixer, preset)
+  modelRuntime.animationActionSlots.set(preset, [...slots, slot])
+  return slot
+}
+
+async function createVrmModelAnimationActionSlot(
+  loaded: LoadedPetVrm,
+  mixer: AnimationMixer,
+  preset: PetVrmStageAnimationPreset
+): Promise<VrmAnimationActionSlot> {
+  const animationUrl = getPetVrmStageAnimationPresetUrl(preset)
+  if (!animationUrl) throw new Error('No VRM animation URL')
+
+  const animation = await loadPetVrmAnimation(animationUrl)
   if (!animation) throw new Error('No VRM animation loaded')
 
   const clip = createPetVrmAnimationClip(loaded.vrm, animation)
@@ -526,10 +616,73 @@ async function createStageModelAnimationMixer(
     reAnchorRootPositionTrack(clip, loaded.vrm)
   }
 
-  const mixer = new AnimationMixer(loaded.vrm.scene)
-  mixer.clipAction(clip).play()
-  mixer.update(0)
-  return mixer
+  return createVrmModelAnimationActionSlotFromClip(mixer, preset, clip)
+}
+
+function createVrmModelAnimationActionSlotFromClip(
+  mixer: AnimationMixer,
+  preset: PetVrmStageAnimationPreset,
+  clip: AnimationClip
+): VrmAnimationActionSlot {
+  const action = mixer.clipAction(clip)
+  action.clampWhenFinished = true
+  action.setLoop(LoopOnce, 1)
+  action.stop()
+  return { action, clip, preset }
+}
+
+function resetVrmModelAnimationRuntime(modelRuntime: VrmModelRuntime, mixer: AnimationMixer | undefined): void {
+  modelRuntime.animationMixer?.stopAllAction()
+  modelRuntime.activeAnimationAction = undefined
+  modelRuntime.animationActionSlots.clear()
+  modelRuntime.animationMixer = mixer
+  modelRuntime.idleAnimationElapsedSeconds = 0
+  modelRuntime.animationPlaybackMode = null
+  modelRuntime.pendingAnimationPreset = undefined
+  modelRuntime.pendingAnimationPlaybackMode = null
+  modelRuntime.pendingAnimationForceAlternate = false
+}
+
+function startVrmModelAnimationAction(
+  modelRuntime: VrmModelRuntime,
+  action: AnimationAction,
+  preset: PetVrmStageAnimationPreset,
+  playbackMode: VrmAnimationPlaybackMode
+): void {
+  const previousAction = modelRuntime.activeAnimationAction
+  if (previousAction === action && modelRuntime.animationPlaybackMode === playbackMode) return
+
+  action.enabled = true
+  action.paused = false
+  action.clampWhenFinished = true
+  action.setLoop(
+    playbackMode === 'runtime' ? LoopRepeat : LoopOnce,
+    playbackMode === 'runtime' ? Number.POSITIVE_INFINITY : 1
+  )
+  action.reset()
+
+  if (previousAction && previousAction !== action) {
+    previousAction.crossFadeTo(action, VRM_STAGE_ANIMATION_CROSSFADE_SECONDS, false)
+  } else {
+    action.fadeIn(VRM_STAGE_ANIMATION_CROSSFADE_SECONDS)
+  }
+  action.play()
+
+  modelRuntime.activeAnimationAction = action
+  modelRuntime.activeAnimationPreset = preset
+  modelRuntime.animationPlaybackMode = playbackMode
+  modelRuntime.idleAnimationElapsedSeconds = 0
+}
+
+function fadeOutActiveVrmModelAnimation(modelRuntime: VrmModelRuntime): void {
+  const action = modelRuntime.activeAnimationAction
+  if (!action) return
+
+  action.paused = false
+  action.fadeOut(VRM_STAGE_ANIMATION_RETURN_SECONDS)
+  modelRuntime.activeAnimationAction = undefined
+  modelRuntime.activeAnimationPreset = undefined
+  modelRuntime.idleAnimationElapsedSeconds = 0
 }
 
 function renderVrmSceneFrame(runtime: SceneRuntime, _timestamp: number, props: VrmPastureSceneProps): void {
@@ -581,8 +734,102 @@ function updateVrmModelTransform(
   modelRuntime.positionZ = model.positionZ
   loaded.root.scale.setScalar(1)
   loaded.root.position.set(model.positionX, model.positionY, model.positionZ)
+  updateVrmModelAnimationPlayback(
+    modelRuntime,
+    loaded,
+    model,
+    getEffectiveVrmAnimationPreset(model, motionState),
+    motionState,
+    delta
+  )
   modelRuntime.animationMixer?.update(delta)
   applyVrmModelPose(modelRuntime, loaded, model, motionState, gazeTarget, lookAtKey, delta)
+}
+
+function getEffectiveVrmAnimationPreset(
+  model: PetVrmStageModel,
+  motionState: PetVrmPresentationMotionState | null
+): PetVrmStageAnimationPreset | undefined {
+  return motionState?.animationPreset ?? model.profile.animationPreset
+}
+
+function updateVrmModelAnimationPlayback(
+  modelRuntime: VrmModelRuntime,
+  loaded: LoadedPetVrm,
+  model: PetVrmStageModel,
+  animationPreset: PetVrmStageAnimationPreset | undefined,
+  motionState: PetVrmPresentationMotionState | null,
+  delta: number
+): void {
+  const mixer = modelRuntime.animationMixer
+  if (!mixer) {
+    modelRuntime.idleAnimationElapsedSeconds = 0
+    modelRuntime.animationPlaybackMode = null
+    return
+  }
+
+  if (motionState) {
+    if (getPetVrmStageAnimationPresetUrl(animationPreset)) {
+      if (modelRuntime.activeAnimationPreset !== animationPreset || modelRuntime.animationPlaybackMode !== 'runtime') {
+        void transitionVrmModelAnimation(modelRuntime, loaded, animationPreset, 'runtime')
+      }
+    }
+    mixer.timeScale = motionState.animationTimeScale ?? 1
+    modelRuntime.idleAnimationElapsedSeconds = 0
+    return
+  }
+
+  const idleMotion = model.profile.idleMotion ?? true
+  if (!idleMotion) {
+    if (modelRuntime.animationPlaybackMode !== 'idle-paused') {
+      fadeOutActiveVrmModelAnimation(modelRuntime)
+      modelRuntime.animationPlaybackMode = 'idle-paused'
+    }
+    mixer.timeScale = 0
+    modelRuntime.idleAnimationElapsedSeconds = 0
+    return
+  }
+
+  if (!getPetVrmStageAnimationPresetUrl(animationPreset)) {
+    if (modelRuntime.animationPlaybackMode !== 'idle') {
+      fadeOutActiveVrmModelAnimation(modelRuntime)
+    }
+    mixer.timeScale = 1
+    modelRuntime.animationPlaybackMode = 'idle'
+    modelRuntime.idleAnimationElapsedSeconds = 0
+    return
+  }
+
+  if (modelRuntime.animationPlaybackMode !== 'idle') {
+    fadeOutActiveVrmModelAnimation(modelRuntime)
+    modelRuntime.idleAnimationElapsedSeconds = 0
+    modelRuntime.animationPlaybackMode = 'idle'
+    mixer.timeScale = 1
+    return
+  }
+
+  mixer.timeScale = 1
+  if (
+    modelRuntime.activeAnimationPreset === animationPreset &&
+    modelRuntime.activeAnimationAction &&
+    !modelRuntime.activeAnimationAction.isRunning()
+  ) {
+    fadeOutActiveVrmModelAnimation(modelRuntime)
+    return
+  }
+
+  modelRuntime.idleAnimationElapsedSeconds += delta
+  if (modelRuntime.idleAnimationElapsedSeconds < VRM_STAGE_IDLE_ANIMATION_INTERVAL_SECONDS) return
+  if (modelRuntime.activeAnimationAction?.isRunning()) return
+
+  void transitionVrmModelAnimation(
+    modelRuntime,
+    loaded,
+    animationPreset,
+    'idle',
+    Boolean(modelRuntime.activeAnimationAction && modelRuntime.activeAnimationPreset === animationPreset)
+  )
+  modelRuntime.idleAnimationElapsedSeconds = 0
 }
 
 function bootstrapFirstReadyModel(runtime: SceneRuntime): void {
@@ -782,12 +1029,20 @@ function disposeSceneRuntime(runtime: SceneRuntime): void {
 }
 
 function disposeVrmModelRuntime(runtime: SceneRuntime, modelRuntime: VrmModelRuntime): void {
+  modelRuntime.animationGeneration += 1
   modelRuntime.loadGeneration += 1
   modelRuntime.loading = false
   modelRuntime.bootstrapped = false
   if (modelRuntime.loaded) {
     modelRuntime.animationMixer?.stopAllAction()
+    modelRuntime.activeAnimationAction = undefined
+    modelRuntime.animationActionSlots.clear()
     modelRuntime.animationMixer = undefined
+    modelRuntime.idleAnimationElapsedSeconds = 0
+    modelRuntime.animationPlaybackMode = null
+    modelRuntime.pendingAnimationPreset = undefined
+    modelRuntime.pendingAnimationPlaybackMode = null
+    modelRuntime.pendingAnimationForceAlternate = false
     runtime.scene.remove(modelRuntime.loaded.root)
     disposePetVrmModel(modelRuntime.loaded)
     modelRuntime.loaded = undefined
@@ -889,17 +1144,12 @@ function applyVrmModelPose(
   lookAtKey: string,
   delta: number
 ): void {
-  const idleMotion = model.profile.idleMotion ?? true
   const expressionManager = loaded.vrm.expressionManager
-
-  if (modelRuntime.animationMixer) {
-    modelRuntime.animationMixer.timeScale = motionState?.animationTimeScale ?? (idleMotion ? 1 : 0)
-  }
 
   applyExpression(model, expressionManager, motionState)
   updatePetVrmBlink(loaded.vrm, modelRuntime.blinkRuntime, model.profile.blink ?? true, delta)
 
-  const lookAtEnabled = model.profile.lookAtCursor ?? true
+  const lookAtEnabled = motionState?.lookAtCursor ?? model.profile.lookAtCursor ?? true
   if (lookAtEnabled && modelRuntime.lastLookAtKey !== lookAtKey) {
     updatePetVrmIdleEyeSaccadesImmediately(loaded.vrm, modelRuntime.eyeSaccadeRuntime, gazeTarget)
     modelRuntime.lastLookAtKey = lookAtKey

@@ -52,7 +52,7 @@ export function buildPetVrmPresentationMotionStateMap(input: {
     const model = getVrmMotionModel(task, modelById)
     if (!model) continue
     candidates.push({
-      animationTimeScale: 0.75,
+      animationTimeScale: 0.6,
       expression: 'neutral',
       expressionIntensity: 0.35,
       modelId: model.modelId,
@@ -88,10 +88,12 @@ export function buildPetVrmPresentationMotionStateMap(input: {
 
 function toVrmPresentationMotionState(candidate: PetVrmMotionCandidate): PetVrmPresentationMotionState {
   return {
+    animationPreset: candidate.animationPreset,
     animationTimeScale: candidate.animationTimeScale,
     expression: candidate.expression,
     expressionIntensity: candidate.expressionIntensity,
     expiresAt: candidate.expiresAt,
+    lookAtCursor: candidate.lookAtCursor,
     modelId: candidate.modelId,
     phase: candidate.phase,
     startedAt: candidate.startedAt,
@@ -118,6 +120,7 @@ function bindingToVrmMotionCandidate(binding: PetTaskBinding, model: PetVrmStage
 
   if (binding.currentToolName) {
     return {
+      animationPreset: 'vroid-shoot',
       animationTimeScale: 1.28,
       expression: 'surprised',
       expressionIntensity: 0.42,
@@ -163,6 +166,7 @@ function bindingToVrmMotionCandidate(binding: PetTaskBinding, model: PetVrmStage
 function bubbleToVrmMotionCandidate(bubble: PetTaskBubbleSnapshot, model: PetVrmStageModel): PetVrmMotionCandidate {
   const failed = bubble.status === 'failed' || bubble.status === 'aborted'
   return {
+    animationPreset: failed ? 'vroid-squat' : 'vroid-peace-sign',
     animationTimeScale: failed ? 0.45 : 1.05,
     expression: failed ? 'sad' : 'happy',
     expressionIntensity: failed ? 0.62 : 0.7,

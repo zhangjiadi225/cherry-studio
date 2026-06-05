@@ -6853,6 +6853,7 @@
         "ambient_light": "环境光",
         "animation_preset": "动作",
         "animation_presets": {
+          "vrm-idle-still": "静立",
           "vroid-greeting": "问候",
           "vroid-model-pose": "模特姿势",
           "vroid-peace-sign": "V 手势",
@@ -6862,6 +6863,7 @@
           "vroid-squat": "屈伸运动"
         },
         "blink": "眨眼",
+        "default_idle_animation": "默认待机动作",
         "delete": "删除 VRM 模型",
         "delete_actor": "删除 VRM 角色",
         "delete_confirm": "确定要删除这个 VRM 模型吗？",
@@ -6879,7 +6881,6 @@
           "sad": "难过",
           "surprised": "惊讶"
         },
-        "default_idle_animation": "默认待机动作",
         "fill_light": "补光",
         "idle_motion": "播放待机动作",
         "import": "导入 VRM",

@@ -35,6 +35,7 @@ const PET_VRM_BLINK_INTERVAL_MIN_SECONDS = 1
 const PET_VRM_BLINK_INTERVAL_MAX_SECONDS = 6
 const PET_VRM_EYE_SACCADE_TARGET_OFFSET = 0.25
 const PET_VRM_EYE_SACCADE_INTERVAL_STEP_MS = 400
+const petVrmAnimationByUrl = new Map<string, Promise<VRMAnimation | undefined>>()
 const PET_VRM_EYE_SACCADE_INTERVAL_PROBABILITIES: Array<[number, number]> = [
   [0.075, 800],
   [0.11, 0],
@@ -55,6 +56,18 @@ for (let index = 1; index < PET_VRM_EYE_SACCADE_INTERVAL_PROBABILITIES.length; i
 }
 
 export async function loadPetVrmAnimation(url: string): Promise<VRMAnimation | undefined> {
+  const cached = petVrmAnimationByUrl.get(url)
+  if (cached) return cached
+
+  const promise = loadPetVrmAnimationFromUrl(url).catch((error) => {
+    petVrmAnimationByUrl.delete(url)
+    throw error
+  })
+  petVrmAnimationByUrl.set(url, promise)
+  return promise
+}
+
+async function loadPetVrmAnimationFromUrl(url: string): Promise<VRMAnimation | undefined> {
   const loader = new GLTFLoader()
   loader.register((parser) => new VRMAnimationLoaderPlugin(parser))
 

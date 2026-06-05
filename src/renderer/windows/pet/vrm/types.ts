@@ -1,4 +1,9 @@
-import type { PetVrmStageExpressionName, PetVrmStageModelProfile, PetVrmStageSceneSettings } from '@shared/pet'
+import type {
+  PetVrmStageAnimationPreset,
+  PetVrmStageExpressionName,
+  PetVrmStageModelProfile,
+  PetVrmStageSceneSettings
+} from '@shared/pet'
 
 export type PetVrmModelSummary = {
   id: string
@@ -50,10 +55,12 @@ export type PetVrmPresentationMotionPhase =
   | 'failed-pulse'
 
 export type PetVrmPresentationMotionState = {
+  animationPreset?: PetVrmStageAnimationPreset
   animationTimeScale?: number
   expression?: PetVrmStageExpressionName
   expressionIntensity?: number
   expiresAt?: number
+  lookAtCursor?: boolean
   modelId: string
   phase: PetVrmPresentationMotionPhase
   startedAt: number

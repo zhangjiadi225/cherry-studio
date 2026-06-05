@@ -124,7 +124,7 @@ describe('vrm stage model profiles', () => {
     })
 
     expect(profile).toMatchObject({
-      animationPreset: 'vroid-show-full-body',
+      animationPreset: 'vrm-idle-still',
       blink: true,
       expression: 'neutral',
       idleMotion: true,
@@ -147,7 +147,7 @@ describe('vrm stage model profiles', () => {
     })
 
     expect(profile.animationPreset).toBe('vroid-greeting')
-    expect(fallback.animationPreset).toBe('vroid-show-full-body')
+    expect(fallback.animationPreset).toBe('vrm-idle-still')
   })
 
   it('normalizes VRM scene settings', () => {

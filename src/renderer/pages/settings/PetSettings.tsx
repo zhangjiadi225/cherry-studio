@@ -82,6 +82,7 @@ const PET_SCENE_MODE_LABEL_KEYS: Record<PetSceneMode, string> = {
   'vrm-stage': 'settings.pet.scene.modes.vrm-stage'
 }
 const PET_VRM_STAGE_ANIMATION_PRESET_LABEL_KEYS: Record<PetVrmStageAnimationPreset, string> = {
+  'vrm-idle-still': 'settings.pet.vrm.animation_presets.vrm-idle-still',
   'vroid-greeting': 'settings.pet.vrm.animation_presets.vroid-greeting',
   'vroid-model-pose': 'settings.pet.vrm.animation_presets.vroid-model-pose',
   'vroid-peace-sign': 'settings.pet.vrm.animation_presets.vroid-peace-sign',
@@ -530,7 +531,7 @@ const PetSettings: FC = () => {
                           </PetPackageSelectField>
                           <PetPackageSelectField label={t('settings.pet.vrm.default_idle_animation')}>
                             <Select
-                              value={effectiveProfile.animationPreset ?? 'vroid-show-full-body'}
+                              value={effectiveProfile.animationPreset ?? 'vrm-idle-still'}
                               onValueChange={(value) =>
                                 isPetVrmStageAnimationPreset(value) &&
                                 void handleVrmModelProfileChange(model, { animationPreset: value })

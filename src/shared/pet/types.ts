@@ -226,6 +226,7 @@ export type PetSceneProfile = {
 }
 
 export const PET_VRM_STAGE_ANIMATION_PRESETS = [
+  'vrm-idle-still',
   'vroid-show-full-body',
   'vroid-greeting',
   'vroid-peace-sign',
@@ -587,7 +588,7 @@ function getDefaultPetVrmStageModelPositionZ(order: unknown): number {
 function normalizePetVrmStageAnimationPreset(value: unknown): PetVrmStageModelProfile['animationPreset'] {
   return typeof value === 'string' && (PET_VRM_STAGE_ANIMATION_PRESETS as readonly string[]).includes(value)
     ? (value as PetVrmStageModelProfile['animationPreset'])
-    : 'vroid-show-full-body'
+    : 'vrm-idle-still'
 }
 
 function normalizePetVrmStageExpressionName(value: unknown): PetVrmStageModelProfile['expression'] {
